@@ -4,7 +4,7 @@
   "account_id": "337de6b8e4de301a53ecae0c06afcc72",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-11",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   // Every resource below is created by scripts/setup.sh; secrets by scripts/secrets.sh.
   // Notes live in Cloudflare Artifacts (ADR 007); writes go through the RepoWriter Durable Object (ADR 008).
@@ -15,7 +15,7 @@
   "vectorize": [{ "binding": "VECTORS", "index_name": "second-brain" }],
   // invocation logs would record request URLs, which carry MCP_TOKEN until OAuth (ADR 004, ADR 011)
   // the Artifacts repository that holds the notes; a staging deploy points at a scratch repo
-  "vars": { "NOTES_REPO": "notes", "VECTORIZE_INDEX": "second-brain", "CF_ACCOUNT_ID": "337de6b8e4de301a53ecae0c06afcc72" },
+  "vars": { "PUBLIC_URL": "https://second-brain-mcp.yudiganeko.workers.dev", "OWNER_GITHUB_ID": "42354260", "NOTES_REPO": "notes", "VECTORIZE_INDEX": "second-brain", "CF_ACCOUNT_ID": "337de6b8e4de301a53ecae0c06afcc72" },
   "artifacts": [{ "binding": "ARTIFACTS", "namespace": "second-brain" }],
   "durable_objects": { "bindings": [{ "name": "WRITER", "class_name": "RepoWriter" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RepoWriter"] }],
@@ -31,5 +31,7 @@
   },
   // reconciliation (ADR 009): daily at 04:00 UTC, or on demand through /admin/reconcile
   "workflows": [{ "name": "reconcile", "binding": "RECONCILE", "class_name": "Reconcile", "schedules": ["0 4 * * *"] }],
+  // OAuth clients, grants and tokens (ADR 011); tokens and secrets stored as hashes by the library
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "465c1e0d7b48470ba697d591c693eb72" }],
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

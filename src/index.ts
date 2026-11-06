@@ -10,6 +10,8 @@ import { ArtifactsNotes, D1Manifest, VectorizeAdapter, WorkersAiEmbedder } from 
 import { handle } from "./indexer/indexer";
 import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
 import { checkPath, ideaPath, norm, withSuffix } from "./lib/notes";
+import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
+import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
 
@@ -26,10 +28,16 @@ interface Env {
   RECONCILE: Workflow;
   NOTES_REPO: string;
   MCP_TOKEN: string;
+  OAUTH_KV: KVNamespace;
+  OAUTH_PROVIDER: import("@cloudflare/workers-oauth-provider").OAuthHelpers;
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
+  OWNER_GITHUB_ID: string;
   ADMIN_SECRET: string;
   HOOK_SECRET: string;
 }
 const E = env as unknown as Env;
+const PUBLIC_URL = (env as unknown as { PUBLIC_URL: string }).PUBLIC_URL;
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 
@@ -218,9 +226,14 @@ async function hasBearer(request: Request, secret: string) {
   return crypto.subtle.timingSafeEqual(given, expected);
 }
 
-export default {
+/** Everything that isn't OAuth plumbing or the OAuth-protected /mcp (see the export at the bottom). */
+const app = {
   async fetch(request: Request, envArg: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
+
+    // MCP client sign-in (ADR 011): consent page, then GitHub, then the owner check
+    if (url.pathname === "/authorize") return authorize(request, envArg);
+    if (url.pathname === "/callback" && request.method === "GET") return callback(request, envArg);
 
     // a 1-hour write token for the notes repo, for the Mac's sync hook (ADR 007). Its own secret,
     // which can do nothing else: a leak from the Mac can't reach the admin routes (#39).
@@ -270,4 +283,33 @@ export default {
       }
     }
   },
+};
+
+// The Worker is its own OAuth 2.1 authorization server (ADR 011). /mcp needs an access token;
+// /authorize, /token, /register and the discovery documents are handled here; everything else
+// goes to `app`. Until every client has moved to OAuth, the token-prefix URL keeps working
+// (`app` serves /<MCP_TOKEN>/mcp); it goes away at most a week after this deploy.
+const oauth = new OAuthProvider<Env>({
+  apiRoute: "/mcp",
+  apiHandler: {
+    async fetch(request, envArg, ctx) {
+      const auth = (ctx as any).auth as { clientId?: string; grantId?: string } | undefined;
+      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, grantId: auth?.grantId }));
+      return mcp(request, envArg, ctx);
+    },
+  },
+  defaultHandler: { fetch: (request, envArg, ctx) => app.fetch(request, envArg as Env, ctx) },
+  authorizeEndpoint: "/authorize",
+  tokenEndpoint: "/token",
+  clientRegistrationEndpoint: "/register",
+  scopesSupported: ["mcp"],
+  clientIdMetadataDocumentEnabled: true,
+  accessTokenTTL: 3600, // 1 hour
+  refreshTokenIdleTTL: 30 * 24 * 3600, // a grant expires after 30 days without use
+  resourceMetadata: { resource: `${PUBLIC_URL}/mcp`, authorization_servers: [PUBLIC_URL] },
+});
+
+export default {
+  fetch: (request: Request, envArg: Env, ctx: ExecutionContext) => oauth.fetch(request, envArg, ctx),
+  queue: app.queue,
 } satisfies ExportedHandler<Env, QueueMessage>;

@@ -20,11 +20,12 @@ export default defineConfig({
       config: false,
       miniflare: {
         compatibilityDate: "2026-06-11",
-        compatibilityFlags: ["nodejs_compat"],
+        compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
+        kvNamespaces: ["OAUTH_KV"],
         d1Databases: ["DB"], // local D1; tests apply migrations/ themselves
         queueProducers: { INDEX_JOBS: "index-jobs" },
         workflows: { RECONCILE: { name: "reconcile", className: "Reconcile" } },
-        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", HOOK_SECRET: "test-hook", NOTES_REPO: "notes", VECTORIZE_INDEX: "test-index", CF_ACCOUNT_ID: "test-account", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
+        bindings: { PUBLIC_URL: "https://example.com", OWNER_GITHUB_ID: "42", GITHUB_CLIENT_ID: "test-client", GITHUB_CLIENT_SECRET: "test-secret", MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", HOOK_SECRET: "test-hook", NOTES_REPO: "notes", VECTORIZE_INDEX: "test-index", CF_ACCOUNT_ID: "test-account", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
       },
     })),
   ],
