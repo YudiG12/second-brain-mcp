@@ -25,6 +25,10 @@ export class FakeNotes implements NotesSource {
     return this.id(this.commits.length - 1);
   }
 
+  async shaAt(path: string, commit: string) {
+    return (await this.noteAt(path, commit))?.sha ?? null;
+  }
+
   async noteAt(path: string, commit: string) {
     const files = this.commits[Number(commit.slice(1))];
     const content = files?.[path];
@@ -79,7 +83,9 @@ export class FakeManifest implements Manifest {
 
 export class FakeQueue {
   sent: IndexMessage[] = [];
-  enqueue = async (ms: IndexMessage[]) => {
+  delays: number[] = [];
+  enqueue = async (ms: IndexMessage[], delaySeconds?: number) => {
     this.sent.push(...ms);
+    if (delaySeconds !== undefined) this.delays.push(delaySeconds);
   };
 }

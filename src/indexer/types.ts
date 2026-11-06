@@ -7,7 +7,13 @@ export type PushedEvent = {
   source: { type: "artifacts.repo"; namespace: string; repoName: string };
   payload: { ref: string; before: string; after: string };
 };
-export type IndexMessage = { type: "index"; path: string; reason: "write" | "reconcile" | "rebuild" };
+export type IndexMessage = {
+  type: "index";
+  path: string;
+  reason: "write" | "reconcile" | "rebuild";
+  /** How many times the post-write check re-enqueued this note; capped, so it can't spin forever. */
+  requeues?: number;
+};
 export type QueueMessage = PushedEvent | IndexMessage;
 
 export const ZERO_SHA = "0".repeat(40);
@@ -17,6 +23,8 @@ export interface NotesSource {
   head(): Promise<string | null>;
   /** The note at a commit: its blob sha and text, or null if the path doesn't exist there. */
   noteAt(path: string, commit: string): Promise<{ sha: string; content: string } | null>;
+  /** Just the blob sha of a note at a commit (no content), or null. */
+  shaAt(path: string, commit: string): Promise<string | null>;
   /** Markdown paths that differ between two commits (every .md path when `before` is all zeros). */
   changedPaths(before: string, after: string): Promise<string[]>;
 }
@@ -40,7 +48,7 @@ export interface Manifest {
   remove(path: string): Promise<void>;
 }
 
-export type Enqueue = (messages: IndexMessage[]) => Promise<void>;
+export type Enqueue = (messages: IndexMessage[], delaySeconds?: number) => Promise<void>;
 
 export type Deps = { notes: NotesSource; index: VectorIndex; embedder: Embedder; manifest: Manifest; enqueue: Enqueue; repoName: string };
 

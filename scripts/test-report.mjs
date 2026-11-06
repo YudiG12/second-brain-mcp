@@ -14,7 +14,7 @@ const tests = report.testResults.flatMap((file) =>
     const line = t.location?.line;
     const url = repo && sha ? `https://github.com/${repo}/blob/${sha}/${path}${line ? `#L${line}` : ""}` : null;
     const name = t.fullName.replace(/\|/g, "\\|");
-    const firstLine = (t.failureMessages?.[0] ?? "").split("\n")[0].replace(/\|/g, "\\|").slice(0, 160);
+    const firstLine = (t.failureMessages?.[0] ?? "").split("\n")[0].replace(/\|/g, "\\|").replace(/`/g, "'").slice(0, 160);
     return { path, status: t.status, link: url ? `[${name}](${url})` : name, error: firstLine };
   }),
 );

@@ -63,7 +63,16 @@ describe("index(path) (spec v2 §5.2)", () => {
     notes.afterRead = () => notes.commit({ "a.md": "alpha v2" });
     expect(await handle({ type: "index", path: "a.md", reason: "write" }, deps)).toEqual({ kind: "requeued", path: "a.md" });
     expect(await manifest.get("a.md")).toBeNull();
-    expect(queue.sent).toEqual([{ type: "index", path: "a.md", reason: "write" }]);
+    expect(queue.sent).toEqual([{ type: "index", path: "a.md", reason: "write", requeues: 1 }]);
+  });
+
+  it("re-enqueues with a delay and a counter, and gives up (throws) after 5 requeues", async () => {
+    notes.afterRead = () => notes.commit({ "a.md": "alpha v2" });
+    await handle({ type: "index", path: "a.md", reason: "write", requeues: 4 }, deps);
+    expect(queue.sent).toEqual([{ type: "index", path: "a.md", reason: "write", requeues: 5 }]);
+    expect(queue.delays).toEqual([30]);
+    notes.afterRead = () => notes.commit({ "a.md": "alpha v3" });
+    await expect(handle({ type: "index", path: "a.md", reason: "write", requeues: 5 }, deps)).rejects.toThrow(/kept changing/);
   });
 
   it("re-enqueues when a deleted note reappears while deleting", async () => {
@@ -80,6 +89,11 @@ describe("index(path) (spec v2 §5.2)", () => {
 });
 
 describe("pushed events", () => {
+  it("ignores message types it doesn't know, instead of failing into the dead-letter queue", async () => {
+    expect((await handle({ type: "cf.artifacts.repo.cloned" } as any, deps)).kind).toBe("ignored");
+    expect((await handle({ nonsense: true } as any, deps)).kind).toBe("ignored");
+  });
+
   it("fans out the changed Markdown paths as index messages", async () => {
     const before = await notes.head();
     const after = notes.commit({ "a.md": "alpha v2", "c.md": "charlie", "b.md": null, "img.png": "other" });

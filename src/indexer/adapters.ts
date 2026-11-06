@@ -17,24 +17,33 @@ export class ArtifactsNotes implements NotesSource {
     return c?.hash ?? null;
   }
 
-  async noteAt(path: string, commit: string) {
-    using repo = await this.artifacts.get(this.repoName);
+  /** Walks the tree to the note's entry: its blob sha, without reading the content. */
+  private async entry(repo: ArtifactsRepo, path: string, commit: string) {
     const c = await repo.readCommit(commit);
     if (!c) return null;
     let tree = c.treeHash;
     const parts = path.split("/");
     for (const [i, name] of parts.entries()) {
-      const entry = (await repo.readTree(tree))?.find((e) => e.name === name);
-      if (!entry) return null;
-      if (i === parts.length - 1) {
-        if (entry.type !== "blob") return null;
-        const blob = await repo.readBlob(entry.hash);
-        return blob ? { sha: entry.hash, content: await blob.text() } : null;
-      }
-      if (entry.type !== "tree") return null;
-      tree = entry.hash;
+      const e = (await repo.readTree(tree))?.find((x) => x.name === name);
+      if (!e) return null;
+      if (i === parts.length - 1) return e.type === "blob" ? e.hash : null;
+      if (e.type !== "tree") return null;
+      tree = e.hash;
     }
     return null;
+  }
+
+  async shaAt(path: string, commit: string) {
+    using repo = await this.artifacts.get(this.repoName);
+    return this.entry(repo, path, commit);
+  }
+
+  async noteAt(path: string, commit: string) {
+    using repo = await this.artifacts.get(this.repoName);
+    const sha = await this.entry(repo, path, commit);
+    if (!sha) return null;
+    const blob = await repo.readBlob(sha);
+    return blob ? { sha, content: await blob.text() } : null;
   }
 
   async changedPaths(before: string, after: string) {

@@ -1,11 +1,15 @@
-import { chunk, idsFrom, pathHash } from "../lib/notes";
+import { chunk, idsFrom, MAX_CHUNKS, pathHash } from "../lib/notes";
 import type { Deps, IndexMessage, Outcome, PushedEvent, QueueMessage } from "./types";
 
 const BRANCH_REF = "refs/heads/main";
+const MAX_REQUEUES = 5; // a note that keeps changing during indexing goes to retries, then the dead-letter queue
+const REQUEUE_DELAY = 30; // seconds: let the burst of changes settle
 
 /** Handles one queue message. Throws on failure, so the queue retries it. */
 export async function handle(msg: QueueMessage, deps: Deps): Promise<Outcome> {
-  return msg.type === "index" ? indexPath(msg, deps) : fanOut(msg, deps);
+  if (msg?.type === "index") return indexPath(msg, deps);
+  if (msg?.type === "cf.artifacts.repo.pushed") return fanOut(msg, deps);
+  return { kind: "ignored", why: `unknown message type: ${String((msg as any)?.type)}` };
 }
 
 /** A push only says which commits changed: turn it into one index message per changed note. */
@@ -37,24 +41,28 @@ async function indexPath(msg: IndexMessage, deps: Deps): Promise<Outcome> {
       const values = await deps.embedder.embed(parts);
       await deps.index.upsert(parts.map((text, seq) => ({ id: `${h}-${seq}`, values: values[seq], metadata: { path, seq, text: text.slice(0, 1500) } })));
     }
-    await deps.index.deleteByIds(await idsFrom(path, parts.length)); // leftovers from a longer version
-    if ((await currentSha(path, deps)) !== note.sha) return requeue(msg, deps);
+    if (parts.length < MAX_CHUNKS) await deps.index.deleteByIds(await idsFrom(path, parts.length)); // leftovers from a longer version
+    if ((await currentSha(path, head!, note.sha, deps)) !== note.sha) return requeue(msg, deps);
     await deps.manifest.put({ path, sha: note.sha, chunks: parts.length });
     return { kind: "indexed", path, chunks: parts.length };
   }
 
   await deps.index.deleteByIds(await idsFrom(path, 0)); // the whole id range, whatever the manifest says
   await deps.manifest.remove(path);
-  if ((await currentSha(path, deps)) !== null) return requeue(msg, deps);
+  if ((await currentSha(path, head, null, deps)) !== null) return requeue(msg, deps);
   return { kind: "deleted", path };
 }
 
-async function currentSha(path: string, deps: Deps) {
+/** The note's sha at the head now. If the head hasn't moved since we read it, that's what we read. */
+async function currentSha(path: string, readAt: string | null, readSha: string | null, deps: Deps) {
   const head = await deps.notes.head();
-  return head ? ((await deps.notes.noteAt(path, head))?.sha ?? null) : null;
+  if (head === readAt) return readSha;
+  return head ? deps.notes.shaAt(path, head) : null;
 }
 
 async function requeue(msg: IndexMessage, deps: Deps): Promise<Outcome> {
-  await deps.enqueue([msg]);
+  const requeues = (msg.requeues ?? 0) + 1;
+  if (requeues > MAX_REQUEUES) throw new Error(`${msg.path} kept changing while being indexed (${MAX_REQUEUES} requeues)`);
+  await deps.enqueue([{ ...msg, requeues }], REQUEUE_DELAY);
   return { kind: "requeued", path: msg.path };
 }

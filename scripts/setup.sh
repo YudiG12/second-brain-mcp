@@ -33,7 +33,9 @@ fi
 
 echo "== D1 database second-brain"
 if wr d1 info second-brain >/dev/null 2>&1; then echo "ok: exists"; else
-  echo "creating: put the printed database_id in wrangler.jsonc"; wr d1 create second-brain; fi
+  wr d1 create second-brain
+  echo "ACTION: put the database_id printed above in wrangler.jsonc, then run this script again."; exit 1
+fi
 wr d1 migrations apply second-brain --remote >/dev/null && echo "ok: migrations applied"
 
 echo "== Queues"
@@ -42,7 +44,7 @@ for q in index-jobs index-jobs-dlq; do
 done
 
 echo "== Push events from $NAMESPACE/$NOTES_REPO to index-jobs"
-if wr queues subscription list index-jobs 2>/dev/null | grep -q "artifacts.repo"; then echo "ok: subscribed"; else
+if wr queues subscription list index-jobs 2>/dev/null | grep "pushed" | grep -q "$NAMESPACE/$NOTES_REPO"; then echo "ok: subscribed"; else
   wr queues subscription create index-jobs --source artifacts.repo --events pushed --source-namespace "$NAMESPACE" --source-repo-name "$NOTES_REPO" >/dev/null && echo "ok: subscribed"; fi
 
 # Last, because changing it breaks every URL on the old subdomain at once.

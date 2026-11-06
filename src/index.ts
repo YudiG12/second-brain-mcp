@@ -35,10 +35,15 @@ const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 
 const embedder = () => new WorkersAiEmbedder(E.AI);
 
-async function enqueue(messages: IndexMessage[]) {
+async function enqueue(messages: IndexMessage[], delaySeconds?: number) {
   // sendBatch takes at most 100 messages
-  for (let i = 0; i < messages.length; i += 100) await E.INDEX_JOBS.sendBatch(messages.slice(i, i + 100).map((body) => ({ body })));
+  for (let i = 0; i < messages.length; i += 100) await E.INDEX_JOBS.sendBatch(messages.slice(i, i + 100).map((body) => ({ body })), delaySeconds ? { delaySeconds } : undefined);
 }
+
+const opPaths = (op: Operation) => (op.kind === "move" ? [op.from, op.to] : [op.path]);
+
+/** Queue retry backoff: 10, 20, 40, 80, 160 seconds (spec v2 §5.2). */
+export const retryDelay = (attempts: number) => 10 * 2 ** (attempts - 1);
 
 function indexerDeps(envArg: Env): Deps {
   return {
@@ -64,7 +69,9 @@ async function write(op: Operation, done: string): Promise<string> {
   try {
     r = await writer().run(op);
   } catch (e) {
-    // the object may have reset mid-write (e.g. during a deploy): the push may or may not have landed
+    // the object may have reset mid-write (e.g. during a deploy): the push may or may not have landed.
+    // Enqueue anyway: indexing reads the head, so this is harmless if nothing landed.
+    await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
     return `Not sure the change was saved (${String(e)}). Check with read_note before retrying.`;
   }
   switch (r.status) {
@@ -73,9 +80,10 @@ async function write(op: Operation, done: string): Promise<string> {
     case "busy":
       return "The notes are changing too fast right now; nothing was saved. Try again.";
     case "unknown":
+      await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
       return `Not sure the change was saved (${r.reason}). Check with read_note before retrying.`;
   }
-  const saved = `${done} (${r.commit.slice(0, 7)})`;
+  const saved = `${done} (${r.commit.slice(0, 7)}). Searchable in a few seconds to a couple of minutes.`;
   try {
     await enqueue(r.paths.map((path) => ({ type: "index", path, reason: "write" })));
     return saved;
@@ -218,7 +226,7 @@ export default {
 
   // index-jobs: one message at a time, in order (ADR 009). index-jobs-dlq: what exhausted its retries.
   async queue(batch: MessageBatch<QueueMessage>, envArg: Env) {
-    if (batch.queue.endsWith("-dlq")) {
+    if (batch.queue === "index-jobs-dlq") {
       for (const msg of batch.messages) {
         console.error(JSON.stringify({ alert: "index job failed after retries", body: msg.body }));
         await envArg.DB.prepare("INSERT INTO alerts (source, body, created_at) VALUES ('dlq', ?, ?)").bind(JSON.stringify(msg.body), new Date().toISOString()).run();
@@ -234,7 +242,7 @@ export default {
         msg.ack();
       } catch (e) {
         console.error(JSON.stringify({ indexFailed: String(e), attempt: msg.attempts, body: msg.body }));
-        msg.retry({ delaySeconds: 10 * 2 ** (msg.attempts - 1) }); // 10, 20, 40, 80, 160 s
+        msg.retry({ delaySeconds: retryDelay(msg.attempts) });
       }
     }
   },
