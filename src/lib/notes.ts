@@ -40,9 +40,19 @@ export async function idsFrom(path: string, from: number) {
   return Array.from({ length: MAX_CHUNKS - from }, (_, i) => `${h}-${from + i}`);
 }
 
-// ideias/YYYY-MM-DD-<slug>.md, date in Brasília time
-export function ideaPath(title: string, now: Date = new Date()) {
+// ideias/YYYY-MM-DD-<slug>.md, date in Brasília time. A title with no ASCII letters or digits
+// gets the first 8 hex characters of its SHA-256 instead of an empty slug (#31).
+export async function ideaPath(title: string, now: Date = new Date()) {
   const day = now.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-  const slug = norm(title).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  let slug = norm(title).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  if (!slug) {
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(title));
+    slug = [...new Uint8Array(h)].slice(0, 4).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
   return `ideias/${day}-${slug}.md`;
+}
+
+// note.md -> note-2.md, note-3.md... (n = 1 keeps the path)
+export function withSuffix(path: string, n: number) {
+  return n === 1 ? path : path.replace(/\.md$/, `-${n}.md`);
 }

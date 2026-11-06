@@ -4,6 +4,7 @@
 
 export type Operation =
   | { kind: "write"; path: string; content: string }
+  | { kind: "create"; path: string; content: string } // fails with code "exists" if the note exists
   | { kind: "edit"; path: string; oldText: string; newText: string }
   | { kind: "delete"; path: string }
   | { kind: "move"; from: string; to: string };
@@ -13,7 +14,7 @@ export type Change = { path: string; content: string | null };
 
 export type WriteResult =
   | { status: "ok"; commit: string; paths: string[]; changes: Change[] } // changes: exactly what was committed
-  | { status: "failed"; reason: string } // nothing was written
+  | { status: "failed"; reason: string; code?: "exists" } // nothing was written
   | { status: "busy" } // the branch kept moving; nothing was written
   | { status: "unknown"; reason: string }; // the push may or may not have landed
 
