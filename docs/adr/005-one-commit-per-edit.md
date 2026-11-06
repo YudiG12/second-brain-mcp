@@ -37,7 +37,7 @@ Every write tool commits to GitHub immediately, one commit per edit, before answ
 
 ## Revisit when
 
-- **Many agents write at once** (a firm-wide shared memory). The first limits hit are the GitHub rate limit, roughly 2,000 edits an hour across all clients, and the single branch, where concurrent commits collide even on different files. The answer is to take Git off the hot path: write to a durable store first (a Durable Object per document, or D1), answer right away, and batch commits to Git in the background, so Git becomes the history rather than the bottleneck.
+- **Many agents write at once** (a firm-wide shared memory). The first limits hit are GitHub's: a `write_note` costs about four API calls (two `sha` lookups, the write and the webhook's read), so the 5,000 requests per hour cap allows roughly 1,250 edits an hour across all clients, and GitHub's secondary limit on content-creating requests is lower still: about 80 per minute and 500 per hour ([GitHub docs](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)), so the real ceiling is about 500 commits an hour, and a `move_note` uses two; and the single branch, where concurrent commits collide even on different files. The answer is to take Git off the hot path: write to a durable store first (a Durable Object per document, or D1), answer right away, and batch commits to Git in the background, so Git becomes the history rather than the bottleneck.
 - **The notes move to Cloudflare Artifacts (v2),** which is built for agents writing to repositories.
 
 ## Related

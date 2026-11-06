@@ -34,7 +34,7 @@ Sync both copies on events, not on a schedule:
 
 **Gained**
 - The agent pulls right before it reads and pushes right after it writes, so it doesn't work on stale notes.
-- The index updates seconds after a push, and nothing runs when nothing changes.
+- Re-indexing starts seconds after a push, and nothing runs when nothing changes. The change becomes searchable after webhook delivery plus Vectorize's own delay (median under 30 seconds, p99 under 2 minutes, per Cloudflare); we observed about a minute.
 
 **Costs**
 - **Tied to Claude Code.** Sync only runs inside Claude Code sessions: an edit made in another editor waits for the next session, and another AI client would need its own hooks.

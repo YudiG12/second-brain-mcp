@@ -25,6 +25,7 @@ Vectorize stays a derived index that can be rebuilt from the repository at any t
 | Alternative | Why not |
 |---|---|
 | **Keep R2 and fix the sync:** send the list of deleted files, run the script automatically, add version tracking | It would mean rebuilding in a script what Git already does natively: history, diffs and the list of removed files. More code to maintain, more places to get wrong. |
+| **R2 event notifications to a Queue** (object created/deleted events) | Would have fixed problem 1, since deletions fire an event. It would not have given history or a way for the Mac and the phone to sync in both directions. |
 | **Store the notes only in Vectorize metadata** | Metadata has a size limit and no history, and the index could no longer be rebuilt from anywhere. |
 
 ## Consequences
@@ -36,7 +37,7 @@ Vectorize stays a derived index that can be rebuilt from the repository at any t
 
 **Costs**
 - **An external dependency.** The Worker needs a GitHub token (fine-grained, one repo, Contents read/write, expires in a year), managed with `set-token.sh`.
-- **Rate limits:** the GitHub API allows 5,000 requests per hour. R2, accessed through a binding, has no such limit.
+- **Rate limits:** the GitHub API allows 5,000 requests per hour. R2, accessed through a binding, has no comparable per-hour API quota.
 - **Availability:** if GitHub is down, writes fail.
 - **Latency:** every read is an HTTP call outside Cloudflare instead of a binding.
 - **A public endpoint:** the webhook must verify GitHub's HMAC signature.
