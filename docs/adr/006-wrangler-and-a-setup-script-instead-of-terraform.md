@@ -19,14 +19,14 @@ The first plan was Terraform. Checking the Cloudflare provider (v5.28.1) showed 
 | **Artifacts repository** | Not supported |
 | **Account Workers subdomain** | Not supported |
 
-The three resources the system depends on most are outside the provider. Everything it does support is also declared in `wrangler.jsonc` or created with `wrangler` (`d1 create`, `queues create`).
+The three resources the system depends on most are outside the provider. Everything it does support is also declared in `wrangler.jsonc` or created with `wrangler` (`d1 create`, `queues create`, `kv namespace create`).
 
 The infrastructure also changes rarely: it is created once and touched only when the architecture changes.
 
 ## Decision
 
 - **`wrangler.jsonc` is the declaration** of the Worker and everything it binds to: Workers AI, Vectorize, the Durable Object class and its migrations, the Queue, the Workflow, the Cron Trigger, and the stores still being decided in v2 ADRs (a D1 database for the index manifest, a KV namespace for OAuth).
-- **An idempotent `scripts/setup.sh`** creates what Wrangler doesn't create on deploy (the Vectorize index, the D1 database, the Queue, the Artifacts repository) and checks the account subdomain. Running it twice changes nothing.
+- **An idempotent `scripts/setup.sh`** creates what Wrangler doesn't create on deploy (the Vectorize index, the Queue, the Artifacts repository, and the D1 database and KV namespace once their ADRs land) and checks the account subdomain. Running it twice changes nothing.
 - **Secrets** are set with `wrangler secret put` and never stored in the repo.
 - **Deploys** run from CI with `wrangler deploy` on merge to `main`.
 

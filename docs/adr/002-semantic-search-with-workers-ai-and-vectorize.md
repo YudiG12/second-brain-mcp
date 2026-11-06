@@ -30,7 +30,7 @@ The two cover each other's blind spots. Semantic search finds paraphrases and sy
 | **Keyword search only** | Doesn't answer open questions or find paraphrases. |
 | **Semantic search only** | Weak on exact names, acronyms and codes. |
 | **English-only embedding models** (bge-base-en, 768 dimensions; bge-small-en, 384) | Much worse at understanding Portuguese text. |
-| **Other multilingual models in the Workers AI catalog** | Not benchmarked in v1; bge-m3 was picked as an established multilingual model. Comparing search quality across models is part of [#13](https://github.com/YudiG12/second-brain-mcp/issues/13). |
+| **Other multilingual models in the Workers AI catalog** | Not benchmarked in v1; bge-m3 was picked as an established multilingual model. Comparing search quality across models is tracked in [#33](https://github.com/YudiG12/second-brain-mcp/issues/33). |
 | **External embeddings** (e.g. OpenAI text-embedding-3-small) | Another API key, notes leaving the account, separate billing. |
 | **Pinecone** | Another vendor and key outside the stack. |
 | **pgvector** | Needs a Postgres database to run and operate. |
