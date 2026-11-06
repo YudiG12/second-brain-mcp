@@ -1,4 +1,4 @@
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
 // Tests run inside workerd, the Workers runtime, with local bindings (Miniflare).
@@ -15,14 +15,16 @@ export default defineConfig({
       : ["default"],
   },
   plugins: [
-    cloudflareTest({
+    cloudflareTest(async () => ({
       main: "./src/index.ts",
       config: false,
       miniflare: {
         compatibilityDate: "2026-06-11",
         compatibilityFlags: ["nodejs_compat"],
-        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", NOTES_REPO: "notes" },
+        d1Databases: ["DB"], // local D1; tests apply migrations/ themselves
+        queueProducers: { INDEX_JOBS: "index-jobs" },
+        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", NOTES_REPO: "notes", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
       },
-    }),
+    })),
   ],
 });

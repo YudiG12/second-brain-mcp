@@ -31,6 +31,22 @@ else
   echo "ok: created (empty; push the notes' history into it, see docs/setup.md)"
 fi
 
+echo "== D1 database second-brain"
+if wr d1 info second-brain >/dev/null 2>&1; then echo "ok: exists"; else
+  wr d1 create second-brain
+  echo "ACTION: put the database_id printed above in wrangler.jsonc, then run this script again."; exit 1
+fi
+wr d1 migrations apply second-brain --remote >/dev/null && echo "ok: migrations applied"
+
+echo "== Queues"
+for q in index-jobs index-jobs-dlq; do
+  if wr queues info "$q" >/dev/null 2>&1; then echo "ok: $q exists"; else wr queues create "$q" >/dev/null && echo "ok: $q created"; fi
+done
+
+echo "== Push events from $NAMESPACE/$NOTES_REPO to index-jobs"
+if wr queues subscription list index-jobs 2>/dev/null | grep "pushed" | grep -q "$NAMESPACE/$NOTES_REPO"; then echo "ok: subscribed"; else
+  wr queues subscription create index-jobs --source artifacts.repo --events pushed --source-namespace "$NAMESPACE" --source-repo-name "$NOTES_REPO" >/dev/null && echo "ok: subscribed"; fi
+
 # Last, because changing it breaks every URL on the old subdomain at once.
 echo "== Workers subdomain"
 current=$(api "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/subdomain" | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("result") or {}).get("subdomain") or "")')
