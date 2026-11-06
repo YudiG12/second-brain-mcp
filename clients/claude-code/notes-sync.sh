@@ -22,13 +22,16 @@ UPSTREAM=$(git rev-parse --symbolic-full-name @{u} 2>/dev/null) # e.g. refs/remo
 fail() { echo "$(date '+%F %T') notes-sync: $*" | tee -a "$LOG" >&2; return 1; }
 age() { echo $(( $(date +%s) - $(date -r "$1" +%s 2>/dev/null || echo 0) )); } # seconds since mtime (BSD and GNU)
 
-# One sync at a time per clone (#16): a mkdir lock with the owner's pid.
+# One sync at a time per clone (#16): a mkdir lock holding the owner's pid. A lock is taken over
+# only if its pid is gone or it is older than LOCK_STALE; a lock without a pid yet (just created)
+# counts as live. Takeover renames the old lock first, so only one process can win it.
 lock() {
   local waited=0
   until mkdir "$LOCK" 2>/dev/null; do
     local pid; pid=$(cat "$LOCK/pid" 2>/dev/null)
-    if { [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; } || [ "$(age "$LOCK")" -gt "$LOCK_STALE" ]; then
-      rm -rf "$LOCK"; continue # abandoned by a process that died
+    if { [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; } || [ "$(age "$LOCK")" -gt "$LOCK_STALE" ]; then
+      mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && rm -rf "$LOCK.stale.$$"
+      continue
     fi
     [ "$waited" -ge "$LOCK_WAIT" ] && { fail "skipped: another session has been syncing $DIR for over ${LOCK_WAIT}s"; return 1; }
     sleep 1; waited=$((waited + 1))
@@ -54,57 +57,66 @@ auth() {
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $token"
 }
 
-# A rebase stopped on a conflict (#15). The remote wins; every local change survives as a
-# "<name>.conflict-<time>.md" note next to the original, pushed so it shows up everywhere.
-resolve_conflict() {
-  local ts copies=0 f
+# Commits whatever is in the working tree, so nothing local lives outside a commit during a pull
+# (no autostash: an autostash conflict would leave markers behind).
+commit_local() {
+  [ -n "$(git status --porcelain)" ] || return 0
+  local n; n=$(git status --porcelain | wc -l | tr -d ' ')
+  git add -A >>"$LOG" 2>&1 && git commit -qm "notes: $n file(s) via Claude Code, $(date '+%F %H:%M')" >>"$LOG" 2>&1
+}
+
+# Pull with rebase. On a conflict (#15) nothing local is lost:
+#   - notes changed only here keep their path and their local version;
+#   - notes changed here and on the remote keep the remote version at their path, and the local
+#     version is saved next to it as <name>.conflict-<time>.md;
+#   - notes changed only on the remote come in as usual.
+# Then it pushes and returns 1, so Claude Code shows that a conflict happened.
+sync_remote() {
+  git pull --rebase -q >>"$LOG" 2>&1 && return 0
+  [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ] || { fail "pull failed in $DIR"; return 1; }
+  local mine base ts saved n=0
+  mine=$(cat .git/rebase-merge/orig-head .git/rebase-apply/orig-head 2>/dev/null | head -1)
+  git rebase --abort >>"$LOG" 2>&1
+  base=$(git merge-base "$mine" "$UPSTREAM")
   ts=$(date '+%Y%m%d-%H%M%S')
-  local saved; saved=$(mktemp -d)
-  # local changes = what our unpushed commits changed, as of our last commit before the rebase
-  local mine; mine=$(cat .git/rebase-merge/orig-head .git/rebase-apply/orig-head 2>/dev/null | head -1)
-  for f in $(git diff --name-only "$UPSTREAM" "$mine" 2>/dev/null); do
+  saved=$(mktemp -d)
+  # remote-changed paths, NUL-separated (safe with spaces and accents)
+  git diff -z --name-only "$base" "$UPSTREAM" > "$saved/.remote"
+  git reset -q --hard "$UPSTREAM" >>"$LOG" 2>&1
+  while IFS= read -r -d '' f; do
+    local both=0
+    while IFS= read -r -d '' r; do [ "$r" = "$f" ] && both=1 && break; done < "$saved/.remote"
     if git cat-file -e "$mine:$f" 2>/dev/null; then
-      mkdir -p "$saved/$(dirname "$f")"; git show "$mine:$f" > "$saved/$f"; copies=$((copies + 1))
-    fi
-  done
-  git rebase --abort 2>/dev/null
-  git reset -q --hard "$UPSTREAM"
-  for f in $(cd "$saved" && find . -type f | sed 's#^\./##'); do
-    local copy="${f%.md}.conflict-$ts.md"
-    mkdir -p "$(dirname "$copy")"; cp "$saved/$f" "$copy"
-  done
+      local dest="$f"
+      if [ "$both" = 1 ]; then dest="${f%.md}.conflict-$ts.md"; n=$((n + 1)); fi
+      mkdir -p "$(dirname "$dest")" && git show "$mine:$f" > "$dest"
+    elif [ "$both" = 0 ]; then
+      rm -f "$f" # deleted here and untouched on the remote: keep the deletion
+    fi # deleted here but changed on the remote: the remote version wins, nothing to save
+  done < <(git diff -z --name-only "$base" "$mine")
   rm -rf "$saved"
-  if [ "$copies" -gt 0 ]; then
-    git add -A && git commit -qm "notes: $copies conflict copy(ies) from the Mac, $(date '+%F %H:%M')" && git push -q
-  fi
-  fail "the remote changed the same notes; kept the remote version and saved $copies local version(s) as *.conflict-$ts.md"
+  commit_local
+  git push -q >>"$LOG" 2>&1 || fail "push after resolving the conflict failed; the next sync retries"
+  fail "the remote changed the same notes; kept the remote version and saved $n local version(s) as *.conflict-$ts.md"
 }
 
 pull() {
   if [ "$1" = "throttle" ] && [ -f "$STAMP" ] && [ "$(age "$STAMP")" -lt "$PULL_EVERY" ]; then return 0; fi
   lock || return 1
+  commit_local
   auth || return 1
-  if ! git pull --rebase --autostash -q 2>>"$LOG"; then
-    if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then resolve_conflict; return 1; fi
-    fail "pull failed in $DIR"; return 1
-  fi
+  sync_remote || return 1
   touch "$STAMP"
 }
 
 push() {
   lock || return 1
-  if [ -n "$(git status --porcelain)" ]; then
-    n=$(git status --porcelain | wc -l | tr -d ' ')
-    git add -A && git commit -qm "notes: $n file(s) via Claude Code, $(date '+%F %H:%M')" || true
-  fi
+  commit_local
   # nothing committed locally that the remote lacks: no network call at all
   [ -n "$(git log @{u}..HEAD --oneline 2>/dev/null)" ] || return 0
   auth || return 1
-  if ! git pull --rebase --autostash -q 2>>"$LOG"; then
-    if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then resolve_conflict; return 1; fi
-    fail "pull before push failed in $DIR"; return 1
-  fi
-  git push -q 2>>"$LOG" || { fail "push failed in $DIR"; return 1; }
+  sync_remote || return 1
+  git push -q >>"$LOG" 2>&1 || { fail "push failed in $DIR (see $LOG)"; return 1; }
   touch "$STAMP"
 }
 

@@ -49,6 +49,12 @@ describe("read_note path rules (#30)", () => {
 });
 
 describe("admin routes", () => {
+  it("lets the hook secret through to the Artifacts token route", async () => {
+    // there's no ARTIFACTS binding in tests, so getting past auth ends in a 500, not a 404
+    const res = await exports.default.fetch("https://example.com/hook/artifacts-token", { method: "POST", headers: { Authorization: "Bearer test-hook" } });
+    expect(res.status).not.toBe(404);
+  });
+
   it("starts a rebuild with the admin secret and returns its instance id", async () => {
     const res = await exports.default.fetch("https://example.com/admin/reconcile?mode=rebuild", { method: "POST", headers: { Authorization: "Bearer test-admin" } });
     expect(res.status).toBe(202);
@@ -65,7 +71,7 @@ describe("admin routes", () => {
     ["/admin/reconcile", "Bearer test-hook"], // the hook secret can't reach admin routes
     ["/admin/reconcile", undefined],
     ["/admin/reconcile", "Bearer wrong"],
-  ])("hide %s without the admin secret (%s)", async (route, auth) => {
+  ])("hide %s without its own secret (%s)", async (route, auth) => {
     const res = await exports.default.fetch(`https://example.com${route}`, {
       method: "POST",
       headers: auth ? { Authorization: auth } : {},
