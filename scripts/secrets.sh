@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Sets the Worker's secrets without printing them. Values are saved to .dev.vars (gitignored) first.
 #   scripts/secrets.sh rotate [--yes]  new MCP_TOKEN. Every MCP client is cut off until it reconnects.
-#   scripts/secrets.sh admin           new ADMIN_SECRET: saved to .dev.vars, the Worker and the macOS Keychain
-#                                      (service "second-brain-admin", read by the Mac sync hook)
+#   scripts/secrets.sh admin           new ADMIN_SECRET (admin routes): saved to .dev.vars and the Worker
+#   scripts/secrets.sh hook            new HOOK_SECRET (only issues Artifacts tokens): saved to .dev.vars,
+#                                      the Worker and the macOS Keychain (service "second-brain-hook")
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")/.."
@@ -37,10 +38,15 @@ case "${1:-}" in
   admin)
     setvar ADMIN_SECRET "$(openssl rand -hex 32)"
     put ADMIN_SECRET "$(getvar ADMIN_SECRET)"
-    # `security` only takes the value as an argument (briefly visible to local processes); fine on a single-user Mac
-    security add-generic-password -U -s second-brain-admin -a "$USER" -w "$(getvar ADMIN_SECRET)"
-    security delete-generic-password -s second-brain-artifacts-token >/dev/null 2>&1 || true
-    echo "ok: ADMIN_SECRET in the Keychain"
     ;;
-  *) echo "usage: scripts/secrets.sh rotate [--yes] | admin"; exit 1;;
+  hook)
+    setvar HOOK_SECRET "$(openssl rand -hex 32)"
+    put HOOK_SECRET "$(getvar HOOK_SECRET)"
+    # `security` only takes the value as an argument (briefly visible to local processes); fine on a single-user Mac
+    security add-generic-password -U -s second-brain-hook -a "$USER" -w "$(getvar HOOK_SECRET)"
+    security delete-generic-password -s second-brain-artifacts-token >/dev/null 2>&1 || true
+    security delete-generic-password -s second-brain-admin >/dev/null 2>&1 || true # the Mac no longer keeps the admin secret
+    echo "ok: HOOK_SECRET in the Keychain"
+    ;;
+  *) echo "usage: scripts/secrets.sh rotate [--yes] | admin | hook"; exit 1;;
 esac

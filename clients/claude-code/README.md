@@ -8,7 +8,9 @@ Claude Code on the Mac reads and writes the notes as local files, in a clone of 
 | `UserPromptSubmit` | Every message | Same pull, at most once every 10 minutes |
 | `Stop` | After each answer (async) | Commit local changes; only if there is something to send: pull with rebase, push |
 
-Git authenticates with a 1-hour write token from the Worker (`POST /admin/artifacts-token`), cached in the macOS Keychain.
+Git authenticates with a 1-hour write token from the Worker (`POST /hook/artifacts-token`), cached in the macOS Keychain. That route takes the hook secret, which can do nothing else.
+
+Only one sync runs at a time per clone (a lock in `.git/notes-sync.lock`; a second session waits up to 10 s, then skips visibly). If a rebase conflicts, the remote version wins and each local version is saved and pushed as `<name>.conflict-<time>.md` next to the original. Failures are logged to `~/.claude/notes-sync.log` and exit 1, so Claude Code shows them. Tests: `bash test/hook/run.sh`.
 
 Every push, from the Mac or from the MCP, emits an Artifacts `pushed` event into the `index-jobs` queue, which re-indexes the changed notes ([ADR 009](../../docs/adr/009-queue-for-indexing-workflow-for-reconciliation.md)).
 
@@ -16,7 +18,7 @@ Every push, from the Mac or from the MCP, emits an Artifacts `pushed` event into
 
 The script is macOS-only: it uses the Keychain (`security`) and BSD `stat -f`.
 
-1. Store the Worker's admin secret in the Keychain: `scripts/secrets.sh admin` creates one and saves it to the Worker and the Keychain (service `second-brain-admin`).
+1. Store the hook secret in the Keychain: `scripts/secrets.sh hook` creates one and saves it to the Worker and the Keychain (service `second-brain-hook`).
 2. Clone the notes repo. By default the script expects it at `~/dev/agentes/cerebro/notas`; set `NOTES_DIR` to use another path, for example in the `env` block of `~/.claude/settings.json`.
 3. Link the script into Claude Code's hooks folder, so this repo stays the single source:
    ```sh

@@ -24,7 +24,7 @@ export default defineConfig({
         d1Databases: ["DB"], // local D1; tests apply migrations/ themselves
         queueProducers: { INDEX_JOBS: "index-jobs" },
         workflows: { RECONCILE: { name: "reconcile", className: "Reconcile" } },
-        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", NOTES_REPO: "notes", VECTORIZE_INDEX: "test-index", CF_ACCOUNT_ID: "test-account", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
+        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", HOOK_SECRET: "test-hook", NOTES_REPO: "notes", VECTORIZE_INDEX: "test-index", CF_ACCOUNT_ID: "test-account", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
       },
     })),
   ],

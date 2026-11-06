@@ -58,9 +58,11 @@ describe("admin routes", () => {
   });
 
   it.each([
-    ["/admin/artifacts-token", undefined],
-    ["/admin/artifacts-token", "Bearer wrong"],
-    ["/admin/artifacts-token", "test-admin"],
+    ["/hook/artifacts-token", undefined],
+    ["/hook/artifacts-token", "Bearer wrong"],
+    ["/hook/artifacts-token", "Bearer test-admin"], // the admin secret can't get Artifacts tokens (#39)
+    ["/admin/artifacts-token", "Bearer test-admin"], // the old route is gone
+    ["/admin/reconcile", "Bearer test-hook"], // the hook secret can't reach admin routes
     ["/admin/reconcile", undefined],
     ["/admin/reconcile", "Bearer wrong"],
   ])("hide %s without the admin secret (%s)", async (route, auth) => {
