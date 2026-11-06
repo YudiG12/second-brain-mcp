@@ -1,5 +1,6 @@
 import { chunk, idsFrom, MAX_CHUNKS, pathHash } from "../lib/notes";
 import type { Deps, IndexMessage, Outcome, PushedEvent, QueueMessage } from "./types";
+import { ZERO_SHA } from "./types";
 
 const BRANCH_REF = "refs/heads/main";
 const MAX_REQUEUES = 5; // a note that keeps changing during indexing goes to retries, then the dead-letter queue
@@ -9,7 +10,25 @@ const REQUEUE_DELAY = 30; // seconds: let the burst of changes settle
 export async function handle(msg: QueueMessage, deps: Deps): Promise<Outcome> {
   if (msg?.type === "index") return indexPath(msg, deps);
   if (msg?.type === "cf.artifacts.repo.pushed") return fanOut(msg, deps);
+  if (msg?.type === "drop") return drop(msg.pathHash, deps);
   return { kind: "ignored", why: `unknown message type: ${String((msg as any)?.type)}` };
+}
+
+/**
+ * Rebuild only: removes vectors whose path hash no note produces. Re-checked at the head first: a
+ * note created after the rebuild's snapshot may produce it now, and then it's re-indexed instead.
+ */
+async function drop(hash: string, deps: Deps): Promise<Outcome> {
+  const head = await deps.notes.head();
+  const paths = head ? await deps.notes.changedPaths(ZERO_SHA, head) : [];
+  for (const path of paths) {
+    if ((await pathHash(path)) === hash) {
+      await deps.enqueue([{ type: "index", path, reason: "rebuild" }]);
+      return { kind: "requeued", path };
+    }
+  }
+  await deps.index.deleteByIds(Array.from({ length: MAX_CHUNKS }, (_, i) => `${hash}-${i}`));
+  return { kind: "dropped", pathHash: hash };
 }
 
 /** A push only says which commits changed: turn it into one index message per changed note. */

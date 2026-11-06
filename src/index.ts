@@ -14,6 +14,7 @@ import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
 
 export { RepoWriter } from "./writer/durable";
+export { Reconcile } from "./reconcile/workflow";
 
 interface Env {
   AI: Ai;
@@ -22,6 +23,7 @@ interface Env {
   WRITER: DurableObjectNamespace<import("./writer/durable").RepoWriter>;
   DB: D1Database;
   INDEX_JOBS: Queue<QueueMessage>;
+  RECONCILE: Workflow;
   NOTES_REPO: string;
   MCP_TOKEN: string;
   ADMIN_SECRET: string;
@@ -227,18 +229,20 @@ export default {
       return Response.json({ remote: info.remote, token: tok.plaintext.split("?")[0], expiresAt: tok.expiresAt }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    // starts a reconciliation (default) or a full rebuild (?mode=rebuild); returns the instance id
+    if (url.pathname === "/admin/reconcile" && request.method === "POST") {
+      if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
+      const mode = url.searchParams.get("mode") === "rebuild" ? "rebuild" : "daily";
+      const instance = await envArg.RECONCILE.create({ id: `manual-${mode}-${Date.now()}`, params: { mode } });
+      return Response.json({ id: instance.id, mode }, { status: 202 });
+    }
+
     // secret URL: /<token>/mcp. Without the token it's a 404, as if nothing existed.
     const prefix = `/${envArg.MCP_TOKEN}`;
     if (!envArg.MCP_TOKEN || !url.pathname.startsWith(prefix + "/")) return new Response("Not found", { status: 404 });
     url.pathname = url.pathname.slice(prefix.length);
 
-    // re-indexes every note through the queue (POST /<token>/reindex). Until the reconciliation
-    // Workflow lands (#7, #8), it doesn't remove vectors of notes that no longer exist.
-    if (url.pathname === "/reindex" && request.method === "POST") {
-      const keys = await listNotes(envArg.ARTIFACTS);
-      await enqueue(keys.map((path) => ({ type: "index", path, reason: "rebuild" })));
-      return Response.json({ enqueued: keys.length }, { status: 202 });
-    }
+
     return mcp(new Request(url.toString(), request), envArg, ctx);
   },
 

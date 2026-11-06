@@ -13,6 +13,11 @@ describe("routing", () => {
     expect(res.status).not.toBe(404);
   });
 
+  it("no longer serves /reindex (replaced by /admin/reconcile?mode=rebuild)", async () => {
+    const res = await exports.default.fetch("https://example.com/test-token/reindex", { method: "POST" });
+    expect(res.status).not.toBe(202);
+  });
+
   it("no longer serves the GitHub webhook (ADR 007; closes #42 by removal)", async () => {
     const res = await exports.default.fetch("https://example.com/test-token/github-webhook", {
       method: "POST",
@@ -44,8 +49,14 @@ describe("read_note path rules (#30)", () => {
 });
 
 describe("admin routes", () => {
-  it.each([undefined, "Bearer wrong", "test-admin"])("hide /admin/artifacts-token without the admin secret (%s)", async (auth) => {
-    const res = await exports.default.fetch("https://example.com/admin/artifacts-token", {
+  it.each([
+    ["/admin/artifacts-token", undefined],
+    ["/admin/artifacts-token", "Bearer wrong"],
+    ["/admin/artifacts-token", "test-admin"],
+    ["/admin/reconcile", undefined],
+    ["/admin/reconcile", "Bearer wrong"],
+  ])("hide %s without the admin secret (%s)", async (route, auth) => {
+    const res = await exports.default.fetch(`https://example.com${route}`, {
       method: "POST",
       headers: auth ? { Authorization: auth } : {},
     });

@@ -14,7 +14,9 @@ export type IndexMessage = {
   /** How many times the post-write check re-enqueued this note; capped, so it can't spin forever. */
   requeues?: number;
 };
-export type QueueMessage = PushedEvent | IndexMessage;
+/** Rebuild only: a path hash with vectors that no note produces. */
+export type DropMessage = { type: "drop"; pathHash: string };
+export type QueueMessage = PushedEvent | IndexMessage | DropMessage;
 
 export const ZERO_SHA = "0".repeat(40);
 
@@ -59,4 +61,5 @@ export type Outcome =
   | { kind: "skipped"; path: string } // already indexed at this version
   | { kind: "indexed"; path: string; chunks: number }
   | { kind: "deleted"; path: string }
+  | { kind: "dropped"; pathHash: string }
   | { kind: "requeued"; path: string }; // the note changed while indexing; nothing recorded

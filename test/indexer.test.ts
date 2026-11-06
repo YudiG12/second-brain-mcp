@@ -96,6 +96,16 @@ describe("drop(pathHash) (rebuild)", () => {
   });
 });
 
+describe("drop(pathHash), re-checked at head", () => {
+  it("re-indexes instead of dropping when a note at the head now produces that hash", async () => {
+    const { pathHash } = await import("../src/lib/notes");
+    notes.commit({ "new.md": "created after the rebuild's snapshot" });
+    const h = await pathHash("new.md");
+    expect(await handle({ type: "drop", pathHash: h }, deps)).toEqual({ kind: "requeued", path: "new.md" });
+    expect(queue.sent).toEqual([{ type: "index", path: "new.md", reason: "rebuild" }]);
+  });
+});
+
 describe("pushed events", () => {
   it("ignores message types it doesn't know, instead of failing into the dead-letter queue", async () => {
     expect((await handle({ type: "cf.artifacts.repo.cloned" } as any, deps)).kind).toBe("ignored");

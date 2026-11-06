@@ -1,7 +1,7 @@
 import { applyD1Migrations, type D1Migration } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeAll, describe, expect, it } from "vitest";
-import { ArtifactsNotes, D1Manifest } from "../src/indexer/adapters";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { allNotes, ArtifactsNotes, D1Manifest, vectorPathHashes } from "../src/indexer/adapters";
 import { ZERO_SHA } from "../src/indexer/types";
 
 const testEnv = env as unknown as { DB: D1Database; TEST_MIGRATIONS: D1Migration[] };
@@ -60,6 +60,47 @@ function fakeArtifacts(commits: Record<string, Tree>) {
   };
   return { get: async () => repo } as unknown as Artifacts;
 }
+
+const twoCommits = () =>
+  fakeArtifacts({
+    c1: { "a.md": "alpha", ideias: { "x.md": "x", "y.md": "y" }, deep: { er: { "z.md": "z" } }, "img.png": "bin" },
+    c2: { "a.md": "alpha v2", ideias: { "x.md": "x", "w.md": "w" }, deep: { er: { "z.md": "z" } }, "img.png": "bin2" },
+  });
+
+describe("allNotes (reconciliation snapshot)", () => {
+  it("lists every Markdown note at a commit with its blob sha", async () => {
+    expect(await allNotes(twoCommits(), "notes", "c2")).toEqual([
+      { path: "a.md", sha: "blob:alpha v2" },
+      { path: "deep/er/z.md", sha: "blob:z" },
+      { path: "ideias/w.md", sha: "blob:w" },
+      { path: "ideias/x.md", sha: "blob:x" },
+    ]);
+  });
+});
+
+describe("vectorPathHashes (REST list-vectors)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns null without a token, so the rebuild skips the vector-orphan scan", async () => {
+    expect(await vectorPathHashes("acct", "idx", undefined)).toBeNull();
+  });
+
+  it("follows the cursor and groups ids by path hash", async () => {
+    const pages = [
+      { success: true, result: { vectors: [{ id: "aaa-0" }, { id: "aaa-1" }], isTruncated: true, nextCursor: "next" } },
+      { success: true, result: { vectors: [{ id: "bbb-0" }], isTruncated: false } },
+    ];
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(pages.shift()));
+    expect(await vectorPathHashes("acct", "idx", "tok")).toEqual(["aaa", "bbb"]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(String(fetch.mock.calls[1][0])).toContain("cursor=next");
+  });
+
+  it("throws on an API error instead of treating it as an empty index", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ success: false }, { status: 403 }));
+    await expect(vectorPathHashes("acct", "idx", "tok")).rejects.toThrow(/403/);
+  });
+});
 
 describe("ArtifactsNotes (tree walking over the binding)", () => {
   const notes = new ArtifactsNotes(
