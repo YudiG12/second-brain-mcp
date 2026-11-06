@@ -8,7 +8,8 @@
   "workers_dev": true,
   // Every resource below is created by scripts/setup.sh; secrets by scripts/secrets.sh.
   // Notes live in Cloudflare Artifacts (ADR 007); writes go through the RepoWriter Durable Object (ADR 008).
-  // Secrets: MCP_TOKEN, ADMIN_SECRET.
+  // Secrets: MCP_TOKEN, ADMIN_SECRET. Pushes to the notes repo reach index-jobs through an event
+  // subscription created by scripts/setup.sh (Artifacts `pushed` events).
   "ai": { "binding": "AI" },
   // semantic index: 1024 dimensions (bge-m3), cosine
   "vectorize": [{ "binding": "VECTORS", "index_name": "second-brain" }],
@@ -18,5 +19,15 @@
   "artifacts": [{ "binding": "ARTIFACTS", "namespace": "second-brain" }],
   "durable_objects": { "bindings": [{ "name": "WRITER", "class_name": "RepoWriter" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RepoWriter"] }],
+  // index manifest and alerts (ADR 010); schema in migrations/
+  "d1_databases": [{ "binding": "DB", "database_name": "second-brain", "database_id": "cf1f9133-d4cb-4836-b90a-1fcfee05d836", "migrations_dir": "migrations" }],
+  // indexing (ADR 009): the consumer is the only index writer, one message at a time
+  "queues": {
+    "producers": [{ "binding": "INDEX_JOBS", "queue": "index-jobs" }],
+    "consumers": [
+      { "queue": "index-jobs", "max_batch_size": 10, "max_concurrency": 1, "max_retries": 5, "dead_letter_queue": "index-jobs-dlq" },
+      { "queue": "index-jobs-dlq", "max_batch_size": 10, "max_concurrency": 1, "max_retries": 3 }
+    ]
+  },
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

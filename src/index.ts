@@ -6,7 +6,10 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
-import { checkPath, chunk, idsFrom, ideaPath, norm, pathHash } from "./lib/notes";
+import { ArtifactsNotes, D1Manifest, VectorizeAdapter, WorkersAiEmbedder } from "./indexer/adapters";
+import { handle } from "./indexer/indexer";
+import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
+import { checkPath, ideaPath, norm } from "./lib/notes";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
 
@@ -17,40 +20,35 @@ interface Env {
   VECTORS: VectorizeIndex;
   ARTIFACTS: Artifacts;
   WRITER: DurableObjectNamespace<import("./writer/durable").RepoWriter>;
+  DB: D1Database;
+  INDEX_JOBS: Queue<QueueMessage>;
   NOTES_REPO: string;
   MCP_TOKEN: string;
   ADMIN_SECRET: string;
 }
 const E = env as unknown as Env;
-const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual, 1024 dimensions
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 
 
-// ---------- Index ----------
+// ---------- Index (ADR 009, ADR 010) ----------
 
-async function embed(texts: string[]): Promise<number[][]> {
-  const res = (await E.AI.run(EMBED_MODEL as any, { text: texts })) as any;
-  return res.data;
+const embedder = () => new WorkersAiEmbedder(E.AI);
+
+async function enqueue(messages: IndexMessage[]) {
+  // sendBatch takes at most 100 messages
+  for (let i = 0; i < messages.length; i += 100) await E.INDEX_JOBS.sendBatch(messages.slice(i, i + 100).map((body) => ({ body })));
 }
 
-
-
-
-// indexes a note: upsert by the same id (re-running doesn't duplicate) and deletes leftover chunks
-async function indexNote(path: string, body: string) {
-  const parts = chunk(body);
-  const h = await pathHash(path);
-  if (parts.length) {
-    const vectors = await embed(parts);
-    await E.VECTORS.upsert(parts.map((t, i) => ({ id: `${h}-${i}`, values: vectors[i], metadata: { path, seq: i, text: t.slice(0, 1500) } })));
-  }
-  await E.VECTORS.deleteByIds(await idsFrom(path, parts.length));
-  return parts.length;
-}
-
-async function unindexNote(path: string) {
-  await E.VECTORS.deleteByIds(await idsFrom(path, 0));
+function indexerDeps(envArg: Env): Deps {
+  return {
+    notes: new ArtifactsNotes(envArg.ARTIFACTS, envArg.NOTES_REPO),
+    index: new VectorizeAdapter(envArg.VECTORS),
+    embedder: new WorkersAiEmbedder(envArg.AI),
+    manifest: new D1Manifest(envArg.DB),
+    enqueue,
+    repoName: envArg.NOTES_REPO,
+  };
 }
 
 // ---------- Writes ----------
@@ -59,8 +57,8 @@ function writer() {
   return E.WRITER.get(E.WRITER.idFromName(E.NOTES_REPO));
 }
 
-// Sends one operation to the repository's writer, then indexes exactly what was committed.
-// Interim until the Queue indexer (PR 4): indexing runs inline, and an indexing failure doesn't fail the write.
+// Sends one operation to the repository's writer, then enqueues the changed notes for indexing.
+// The Queue consumer is the only index writer (ADR 009); a failed enqueue doesn't fail the write.
 async function write(op: Operation, done: string): Promise<string> {
   let r: WriteResult;
   try {
@@ -79,10 +77,10 @@ async function write(op: Operation, done: string): Promise<string> {
   }
   const saved = `${done} (${r.commit.slice(0, 7)})`;
   try {
-    for (const c of r.changes) c.content === null ? await unindexNote(c.path) : await indexNote(c.path, c.content);
+    await enqueue(r.paths.map((path) => ({ type: "index", path, reason: "write" })));
     return saved;
   } catch (e) {
-    return `${saved}. Search will catch up later (indexing failed: ${String(e)}).`;
+    return `${saved}. Search will catch up later (enqueue failed: ${String(e)}).`;
   }
 }
 
@@ -125,7 +123,7 @@ function createServer() {
     "semantic_search",
     { description: "Semantic search across notes (embeddings + Vectorize). Good for questions like 'what did I decide about X'.", inputSchema: { query: z.string(), topK: z.number().int().min(1).max(10).optional() } },
     async ({ query, topK }) => {
-      const [q] = await embed([query]);
+      const [q] = await embedder().embed([query]);
       const res = await E.VECTORS.query(q, { topK: topK ?? 5, returnMetadata: "all" });
       const out = res.matches.map((m) => `[${m.score.toFixed(2)}] ${m.metadata?.path} (#${m.metadata?.seq})\n${m.metadata?.text}`);
       return text(out.join("\n\n---\n\n") || "Nothing found.");
@@ -208,16 +206,36 @@ export default {
     if (!envArg.MCP_TOKEN || !url.pathname.startsWith(prefix + "/")) return new Response("Not found", { status: 404 });
     url.pathname = url.pathname.slice(prefix.length);
 
-    // rebuilds the whole index from the notes (POST /<token>/reindex)
+    // re-indexes every note through the queue (POST /<token>/reindex). Until the reconciliation
+    // Workflow lands (#7, #8), it doesn't remove vectors of notes that no longer exist.
     if (url.pathname === "/reindex" && request.method === "POST") {
       const keys = await listNotes(envArg.ARTIFACTS);
-      let chunks = 0;
-      for (const p of keys) {
-        const body = await readNote(envArg.ARTIFACTS, p);
-        if (body !== null) chunks += await indexNote(p, body);
-      }
-      return Response.json({ notes: keys.length, chunks });
+      await enqueue(keys.map((path) => ({ type: "index", path, reason: "rebuild" })));
+      return Response.json({ enqueued: keys.length }, { status: 202 });
     }
     return mcp(new Request(url.toString(), request), envArg, ctx);
   },
-} satisfies ExportedHandler<Env>;
+
+  // index-jobs: one message at a time, in order (ADR 009). index-jobs-dlq: what exhausted its retries.
+  async queue(batch: MessageBatch<QueueMessage>, envArg: Env) {
+    if (batch.queue.endsWith("-dlq")) {
+      for (const msg of batch.messages) {
+        console.error(JSON.stringify({ alert: "index job failed after retries", body: msg.body }));
+        await envArg.DB.prepare("INSERT INTO alerts (source, body, created_at) VALUES ('dlq', ?, ?)").bind(JSON.stringify(msg.body), new Date().toISOString()).run();
+        msg.ack();
+      }
+      return;
+    }
+    const deps = indexerDeps(envArg);
+    for (const msg of batch.messages) {
+      try {
+        const outcome = await handle(msg.body, deps);
+        console.log(JSON.stringify({ indexed: outcome }));
+        msg.ack();
+      } catch (e) {
+        console.error(JSON.stringify({ indexFailed: String(e), attempt: msg.attempts, body: msg.body }));
+        msg.retry({ delaySeconds: 10 * 2 ** (msg.attempts - 1) }); // 10, 20, 40, 80, 160 s
+      }
+    }
+  },
+} satisfies ExportedHandler<Env, QueueMessage>;

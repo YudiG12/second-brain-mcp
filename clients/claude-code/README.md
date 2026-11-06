@@ -8,7 +8,9 @@ Claude Code on the Mac reads and writes the notes as local files, in a clone of 
 | `UserPromptSubmit` | Every message | Same pull, at most once every 10 minutes |
 | `Stop` | After each answer (async) | Commit local changes; only if there is something to send: pull with rebase, push |
 
-Git authenticates with a 1-hour write token from the Worker (`POST /admin/artifacts-token`), cached in the macOS Keychain. Until the Queue indexer lands (PR 4), a push from the Mac is not re-indexed automatically: run `POST /<MCP_TOKEN>/reindex`.
+Git authenticates with a 1-hour write token from the Worker (`POST /admin/artifacts-token`), cached in the macOS Keychain.
+
+Every push, from the Mac or from the MCP, emits an Artifacts `pushed` event into the `index-jobs` queue, which re-indexes the changed notes ([ADR 009](../../docs/adr/009-queue-for-indexing-workflow-for-reconciliation.md)).
 
 ## Install
 
