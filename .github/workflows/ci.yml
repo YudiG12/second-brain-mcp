@@ -37,8 +37,10 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          npx wrangler versions upload -c reports.wrangler.jsonc --preview-alias "pr-${{ github.event.pull_request.number }}" >/dev/null
+          out=$(npx wrangler versions upload -c reports.wrangler.jsonc --preview-alias "pr-${{ github.event.pull_request.number }}" 2>&1)
           echo "url=https://pr-${{ github.event.pull_request.number }}-second-brain-mcp-tests.yudiganeko.workers.dev" >> "$GITHUB_OUTPUT"
+          # each upload also gets its own URL, so every commit keeps its report (red ones included)
+          echo "version_url=$(printf '%s\n' "$out" | grep -o 'Version Preview URL: https://[^ ]*' | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       - name: Post the test report on the PR
         if: always() && github.event_name == 'pull_request' && hashFiles('reports/tests.json') != ''
         continue-on-error: true
@@ -47,9 +49,11 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR: ${{ github.event.pull_request.number }}
           UI_URL: ${{ steps.ui.outputs.url }}
+          UI_VERSION_URL: ${{ steps.ui.outputs.version_url }}
         run: |
-          node scripts/test-report.mjs reports/tests.json > report.md
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- test-report -->")) | .id' | tail -1)
+          if [ -n "$id" ]; then gh api "repos/$GITHUB_REPOSITORY/issues/comments/$id" --jq .body > previous.md; else : > previous.md; fi
+          PREVIOUS=previous.md node scripts/test-report.mjs reports/tests.json > report.md
           if [ -n "$id" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@report.md >/dev/null; else gh pr comment "$PR" --body-file report.md; fi
 
   deploy:
