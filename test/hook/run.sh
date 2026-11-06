@@ -134,7 +134,8 @@ setup
 (cd "$T/other" && printf 'phone\n' > ideias/Nota.md && git add -A && git commit -qm phone && git push -q)
 printf 'mac\n' > "$T/mac/ideias/nota.md"
 bash "$HOOK" push 2>/dev/null
-check "both texts survive on the remote" 'git -C "$T/remote.git" grep -q "^phone" main && git -C "$T/remote.git" grep -q "^mac" main'
+printf 'later\n' > "$T/mac/ideias/other.md"; bash "$HOOK" push 2>/dev/null # a later sync must not overwrite one with the other
+check "both texts survive on the remote, also after the next sync" 'git -C "$T/remote.git" grep -q "^phone" main && git -C "$T/remote.git" grep -q "^mac" main'
 
 echo "a remote file where the Mac has a folder"
 setup

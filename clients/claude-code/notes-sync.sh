@@ -27,6 +27,10 @@ STAMP=.git/.last-pull
 LOCK=.git/notes-sync.lock
 mkdir -p "$(dirname "$LOG")"
 
+# The hook's own commits and merges ignore user settings that would break them: signing without a
+# key, global commit hooks, merge.ff=only.
+g() { git -c commit.gpgsign=false -c core.hooksPath=/dev/null -c merge.ff=true "$@"; }
+
 fail() { echo "$(date '+%F %T') notes-sync: $*" | tee -a "$LOG" >&2; return 1; }
 age() { echo $(( $(date +%s) - $(date -r "$1" +%s 2>/dev/null || echo 0) )); } # seconds since mtime (BSD and GNU)
 mid_rebase() { [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; }
@@ -76,7 +80,8 @@ auth() {
 commit_local() {
   [ -n "$(git status --porcelain)" ] || return 0
   local n; n=$(git status --porcelain | wc -l | tr -d ' ')
-  git add -A >>"$LOG" 2>&1 && git commit -qm "notes: $n file(s) via Claude Code, $(date '+%F %H:%M')" >>"$LOG" 2>&1
+  g add -A >>"$LOG" 2>&1 && g commit -qm "notes: $n file(s) via Claude Code, $(date '+%F %H:%M')" >>"$LOG" 2>&1 ||
+    { fail "could not commit local changes in $DIR (see $LOG); nothing was synced"; return 1; }
 }
 
 conflict_name() { # a/b.md -> a/b.conflict-<ts>.md ; a/img.png -> a/img.conflict-<ts>.png
@@ -95,6 +100,15 @@ resolve_merge() {
   list=$(mktemp)
   git ls-files -u -z | tr '\0' '\n' | cut -f2 | sort -u | tr '\n' '\0' > "$list"
   while IFS= read -r -d '' f; do
+    # Edited by hand after an interrupted merge (no markers left, and neither side's version):
+    # keep that edit too, as its own copy.
+    if [ -f "$f" ] && ! grep -q '^<<<<<<< ' -- "$f" 2>/dev/null; then
+      local wt; wt=$(git hash-object -- "$f")
+      if [ "$wt" != "$(git rev-parse -q ":2:$f" 2>/dev/null)" ] && [ "$wt" != "$(git rev-parse -q ":3:$f" 2>/dev/null)" ]; then
+        local edited; edited=$(conflict_name "$f" "$ts-edited")
+        cp -- "./$f" "./$edited" && git add -- "./$edited" && n=$((n + 1)) || { rm -f "$list"; fail "could not save the edited $f; the merge is left as is"; return 1; }
+      fi
+    fi
     if git cat-file -e ":2:$f" 2>/dev/null; then
       local copy; copy=$(conflict_name "$f" "$ts")
       mkdir -p -- "$(dirname -- "$copy")" && rm -f -- "./$copy" && git show ":2:$f" > "./$copy" && git add -- "./$copy" || { rm -f "$list"; fail "could not save the local version of $f; the merge is left as is for the next run"; return 1; }
@@ -110,8 +124,11 @@ resolve_merge() {
   rm -f "$list"
   [ -n "$(git ls-files -u)" ] && { fail "conflicts remain in $DIR; the merge is left as is for the next run"; return 1; }
   [ -n "${NOTES_SYNC_TEST_DURING_RESOLVE:-}" ] && eval "$NOTES_SYNC_TEST_DURING_RESOLVE"
-  git add -A >>"$LOG" 2>&1 # anything written meanwhile goes into the merge commit, not lost
-  git commit -q --no-edit >>"$LOG" 2>&1 || { fail "could not commit the merge in $DIR"; return 1; }
+  g add -A >>"$LOG" 2>&1 # anything written meanwhile goes into the merge commit, not lost
+  g commit -q --no-edit >>"$LOG" 2>&1 || { fail "could not commit the merge in $DIR"; return 1; }
+  # git moves a remote file out of a local folder's way as "<name>~<ref>": both survive, but say so
+  local moved; moved=$(git ls-files | grep -c '~refs_remotes_' || true)
+  [ "$moved" -gt 0 ] && n=$((n + moved))
   [ "$n" -gt 0 ] && CONFLICTS="$n local version(s) saved as *.conflict-$ts.*"
   return 0
 }
@@ -121,12 +138,32 @@ sync_remote() {
   git fetch -q >>"$LOG" 2>&1 || { fail "fetch failed in $DIR (see $LOG)"; return 1; }
   git merge-base --is-ancestor "$UPSTREAM" HEAD && return 0 # nothing new on the remote
   if git merge-base --is-ancestor HEAD "$UPSTREAM"; then
-    git merge -q --ff-only "$UPSTREAM" >>"$LOG" 2>&1 || { fail "fast-forward failed in $DIR (see $LOG)"; return 1; }
-    return 0
+    g merge -q --ff-only "$UPSTREAM" >>"$LOG" 2>&1 || { fail "fast-forward failed in $DIR (see $LOG)"; return 1; }
+    split_case_clashes; return
   fi
-  git merge -q --no-edit "$UPSTREAM" >>"$LOG" 2>&1 && return 0
+  g merge -q --no-edit "$UPSTREAM" >>"$LOG" 2>&1 && { split_case_clashes; return; }
   [ -f .git/MERGE_HEAD ] || { fail "merge failed in $DIR (see $LOG)"; return 1; }
-  resolve_merge
+  resolve_merge && split_case_clashes
+}
+
+# On macOS two paths that differ only in case (Nota.md, nota.md) are one file on disk, so the
+# next commit would overwrite one with the other. Keep the remote one at its path and move the
+# local one's text to a conflict copy.
+split_case_clashes() {
+  local dup ts n=0
+  ts=$(date '+%Y%m%d-%H%M%S')
+  while IFS= read -r dup; do
+    while IFS= read -r -d '' f; do
+      [ "$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')" = "$dup" ] || continue
+      git cat-file -e "$UPSTREAM:$f" 2>/dev/null && continue # the remote's spelling stays
+      local copy; copy=$(conflict_name "$f" "$ts")
+      git show "HEAD:$f" > "./$copy.tmp" && g rm -q --cached -- "./$f" >>"$LOG" 2>&1 && mv "./$copy.tmp" "./$copy" && g add -- "./$copy" && n=$((n + 1))
+      git checkout -q "$UPSTREAM" -- "$(git ls-tree -r --name-only -z "$UPSTREAM" | tr '\0' '\n' | grep -ix -- "$f" | head -1)" 2>>"$LOG"
+    done < <(git ls-files -z)
+  done < <(git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d)
+  [ "$n" -gt 0 ] || return 0
+  g commit -qm "notes: $n case clash(es) kept as conflict copies" >>"$LOG" 2>&1
+  CONFLICTS="${CONFLICTS:+$CONFLICTS; }$n note(s) differing only in case kept as *.conflict-$ts.*"
 }
 
 # Finishes what an interrupted run left: a merge in progress.
@@ -150,7 +187,7 @@ CONFLICTS=""
 pull() {
   if [ "$1" = "throttle" ] && [ -f "$STAMP" ] && [ "$(age "$STAMP")" -lt "$PULL_EVERY" ] && [ ! -f .git/MERGE_HEAD ]; then return 0; fi
   start || return 1
-  commit_local
+  commit_local || return 1
   sync_remote || return 1
   touch "$STAMP"
   # local commits made by the merge or before it go out now, so the remote has the copies
@@ -160,7 +197,7 @@ pull() {
 
 push() {
   start || return 1
-  commit_local
+  commit_local || return 1
   # nothing committed locally that the remote lacks: no network call at all
   [ -n "$(git log "$UPSTREAM..HEAD" --oneline 2>/dev/null)" ] || return 0
   sync_remote || return 1
