@@ -9,9 +9,9 @@ SUBDOMAIN="yudiganeko"
 INDEX="second-brain"
 
 wr() { npx --no-install wrangler "$@"; }
-api() { # Cloudflare API with the same credentials Wrangler uses; the token is never printed
+api() { # Cloudflare API with the same credentials Wrangler uses; the token goes through stdin, never argv
   local token; token="${CLOUDFLARE_API_TOKEN:-$(wr auth token --json 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')}"
-  curl -fsS -H "Authorization: Bearer $token" -H "Content-Type: application/json" "$@"
+  printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS --config - -H "Content-Type: application/json" "$@"
 }
 
 echo "== Vectorize index $INDEX"
@@ -23,10 +23,10 @@ fi
 
 # Last, because changing it breaks every URL on the old subdomain at once.
 echo "== Workers subdomain"
-current=$(api "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/subdomain" | python3 -c 'import json,sys;print(json.load(sys.stdin)["result"]["subdomain"])')
+current=$(api "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/subdomain" | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("result") or {}).get("subdomain") or "")')
 if [ "$current" = "$SUBDOMAIN" ]; then
   echo "ok: $SUBDOMAIN.workers.dev"
-elif [ -z "$current" ] || [ "$current" = "None" ]; then
+elif [ -z "$current" ]; then
   api -X PUT "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/subdomain" --data "{\"subdomain\":\"$SUBDOMAIN\"}" >/dev/null
   echo "ok: $SUBDOMAIN.workers.dev"
 else
@@ -36,4 +36,4 @@ else
   exit 1
 fi
 
-echo "Done. Next: scripts/secrets.sh, then npx wrangler deploy (or merge to main)."
+echo "Done. Next: npx wrangler deploy (first time), then scripts/secrets.sh rotate and github. See docs/setup.md."

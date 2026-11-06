@@ -12,5 +12,6 @@
   "ai": { "binding": "AI" },
   // semantic index: 1024 dimensions (bge-m3), cosine
   "vectorize": [{ "binding": "VECTORS", "index_name": "second-brain" }],
-  "observability": { "enabled": true }
+  // invocation logs would record request URLs, which carry MCP_TOKEN until OAuth (ADR 004, ADR 011)
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }
