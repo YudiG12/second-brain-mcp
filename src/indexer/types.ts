@@ -36,6 +36,8 @@ export type Vector = { id: string; values: number[]; metadata: { path: string; s
 export interface VectorIndex {
   upsert(vectors: Vector[]): Promise<void>;
   deleteByIds(ids: string[]): Promise<void>;
+  /** The note path stored in a vector's metadata, or null if the vector doesn't exist. */
+  pathOf(id: string): Promise<string | null>;
 }
 
 export interface Embedder {

@@ -99,6 +99,10 @@ export class VectorizeAdapter implements VectorIndex {
   async deleteByIds(ids: string[]) {
     await this.vectors.deleteByIds(ids);
   }
+  async pathOf(id: string) {
+    const [v] = await this.vectors.getByIds([id]);
+    return (v?.metadata?.path as string | undefined) ?? null;
+  }
 }
 
 export class WorkersAiEmbedder implements Embedder {
@@ -130,7 +134,8 @@ export async function allNotes(artifacts: Artifacts, repoName: string, commit: s
 
 /**
  * Vector ids grouped by path hash, through the REST API (the binding can't list). Needs an API
- * token with Vectorize read; without one, returns null and the rebuild skips vector orphans.
+ * token with the Vectorize Read permission; without one, returns null and the rebuild skips
+ * vector orphans.
  */
 export async function vectorPathHashes(accountId: string, indexName: string, token: string | undefined): Promise<string[] | null> {
   if (!token) return null;
@@ -141,7 +146,10 @@ export async function vectorPathHashes(accountId: string, indexName: string, tok
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     const body = (await res.json()) as { success: boolean; result?: { vectors: { id: string }[]; isTruncated: boolean; nextCursor?: string } };
     if (!body.success || !body.result) throw new Error(`list-vectors failed: HTTP ${res.status}`);
-    for (const v of body.result.vectors) hashes.add(v.id.slice(0, v.id.lastIndexOf("-")));
+    for (const v of body.result.vectors) {
+      const dash = v.id.lastIndexOf("-");
+      if (dash > 0) hashes.add(v.id.slice(0, dash)); // our ids are <hash>-<seq>; skip anything else
+    }
     cursor = body.result.isTruncated ? body.result.nextCursor : undefined;
   } while (cursor);
   return [...hashes].sort();

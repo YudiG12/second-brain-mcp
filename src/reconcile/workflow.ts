@@ -9,6 +9,7 @@ type Env = {
   DB: D1Database;
   INDEX_JOBS: Queue;
   NOTES_REPO: string;
+  VECTORIZE_INDEX: string;
   CF_ACCOUNT_ID: string;
   CF_API_TOKEN?: string; // optional: Vectorize read, for the rebuild's orphan scan
 };
@@ -30,12 +31,15 @@ export class Reconcile extends WorkflowEntrypoint<Env, { mode?: Mode }> {
       },
       index: {
         manifest: async () => (await env.DB.prepare("SELECT path, sha FROM manifest").all<{ path: string; sha: string }>()).results,
-        vectorPathHashes: () => vectorPathHashes(env.CF_ACCOUNT_ID, "second-brain", env.CF_API_TOKEN),
+        vectorPathHashes: () => vectorPathHashes(env.CF_ACCOUNT_ID, env.VECTORIZE_INDEX, env.CF_API_TOKEN),
       },
       enqueue: async (ms) => {
         if (ms.length) await env.INDEX_JOBS.sendBatch(ms.map((body) => ({ body })));
       },
       pathHash,
+      resolveDlqAlerts: async () => {
+        await env.DB.prepare("UPDATE alerts SET resolved_at = ? WHERE source = 'dlq' AND resolved_at IS NULL").bind(new Date().toISOString()).run();
+      },
       alert: async (body) => {
         await env.DB.prepare("INSERT INTO alerts (source, body, created_at) VALUES ('reconcile', ?, ?)").bind(body, new Date().toISOString()).run();
       },

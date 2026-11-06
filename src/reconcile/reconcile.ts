@@ -9,9 +9,12 @@ import { ALERT_ABOVE, BATCH } from "./types";
 export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps): Promise<Report> {
   const reason = mode === "rebuild" ? "rebuild" : "reconcile";
 
+  // Step results are capped at 1 MiB: about 10,000 notes at ~100 bytes each.
   const { commit, notes } = await step.do("snapshot source", async () => {
     const commit = await deps.source.head();
-    return { commit, notes: commit ? await deps.source.allNotes(commit) : ([] as NoteSha[]) };
+    const notes = commit ? await deps.source.allNotes(commit) : ([] as NoteSha[]);
+    if (notes.length > 8000) console.warn(JSON.stringify({ reconcile: "snapshot nearing the 1 MiB step limit", notes: notes.length }));
+    return { commit, notes };
   });
 
   const { manifest, vectorHashes } = await step.do("snapshot index", async () => ({
@@ -19,7 +22,9 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
     vectorHashes: mode === "rebuild" ? await deps.index.vectorPathHashes() : null,
   }));
 
-  // compare
+  // Compare. This runs outside a step, so it re-runs on replay: it must stay a pure function of
+  // the cached snapshots (stable order, no clocks, no randomness), or a replay would send different
+  // slices in each "enqueue i/n" step.
   const indexed = new Map(manifest.map((r) => [r.path, r.sha]));
   const inSource = new Set(notes.map((n) => n.path));
   const fresh = notes.filter((n) => !indexed.has(n.path)).map((n) => n.path);
@@ -60,7 +65,9 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
       inFlight: fixedPaths.length - missed,
       alerted: mode === "daily" && missed > ALERT_ABOVE,
     };
+    // a retried report step can write the alert twice; harmless
     if (report.alerted) await deps.alert(JSON.stringify(report));
+    await deps.resolveDlqAlerts();
     return report;
   });
 }

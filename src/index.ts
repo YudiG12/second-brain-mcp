@@ -88,7 +88,7 @@ async function describe(r: WriteResult, op: Operation, done: string): Promise<st
       await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
       return `Not sure the change to ${opPaths(op).join(" and ")} was saved (${r.reason}). Check it with read_note before retrying.`;
   }
-  const saved = `${done} (${r.commit.slice(0, 7)}). Searchable in a few seconds to a couple of minutes.`;
+  const saved = `${done} (${r.commit.slice(0, 7)}). Search reflects it in a few seconds to a couple of minutes.`;
   try {
     await enqueue(r.paths.map((path) => ({ type: "index", path, reason: "write" })));
     return saved;
@@ -233,7 +233,7 @@ export default {
     if (url.pathname === "/admin/reconcile" && request.method === "POST") {
       if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
       const mode = url.searchParams.get("mode") === "rebuild" ? "rebuild" : "daily";
-      const instance = await envArg.RECONCILE.create({ id: `manual-${mode}-${Date.now()}`, params: { mode } });
+      const instance = await envArg.RECONCILE.create({ id: `manual-${mode}-${crypto.randomUUID()}`, params: { mode } });
       return Response.json({ id: instance.id, mode }, { status: 202 });
     }
 

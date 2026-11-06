@@ -31,6 +31,8 @@ export type ReconcileDeps = {
   enqueue: (messages: (IndexMessage | DropMessage)[]) => Promise<void>;
   pathHash: (path: string) => Promise<string>;
   alert: (body: string) => Promise<void>;
+  /** Marks open dead-letter alerts resolved: the run just fixed whatever they missed. */
+  resolveDlqAlerts: () => Promise<void>;
 };
 
 

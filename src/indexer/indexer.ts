@@ -20,6 +20,17 @@ export async function handle(msg: QueueMessage, deps: Deps): Promise<Outcome> {
  */
 async function drop(hash: string, deps: Deps): Promise<Outcome> {
   const head = await deps.notes.head();
+  // chunk 0 carries the path in its metadata: one lookup instead of walking every note
+  const known = await deps.index.pathOf(`${hash}-0`);
+  if (known) {
+    if (head && (await deps.notes.shaAt(known, head)) && (await pathHash(known)) === hash) {
+      await deps.enqueue([{ type: "index", path: known, reason: "rebuild" }]);
+      return { kind: "requeued", path: known };
+    }
+    await deps.index.deleteByIds(Array.from({ length: MAX_CHUNKS }, (_, i) => `${hash}-${i}`));
+    return { kind: "dropped", pathHash: hash };
+  }
+  // no chunk 0 (only leftovers): fall back to checking every note at the head
   const paths = head ? await deps.notes.changedPaths(ZERO_SHA, head) : [];
   for (const path of paths) {
     if ((await pathHash(path)) === hash) {
