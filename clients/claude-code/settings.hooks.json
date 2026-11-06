@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "bash \"$HOME/.claude/hooks/notes-sync.sh\" pull", "timeout": 20 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "bash \"$HOME/.claude/hooks/notes-sync.sh\" pull-throttle", "timeout": 15 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "bash \"$HOME/.claude/hooks/notes-sync.sh\" push", "timeout": 30, "async": true }] }
+    ]
+  }
+}
