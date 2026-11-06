@@ -22,11 +22,11 @@ The two jobs have different shapes:
 
 ## Decision
 
-**One writer for the index: the Queue consumer.** Three things want to change the index: the Queue consumer (push events), the reconciliation, and the write tools themselves (ADR 007 keeps in-tool indexing for MCP writes). Without an order between them, a reconciliation could delete the vectors of a note created while it ran, or re-index an old version over a newer one. So:
+**One writer for the index: the Queue consumer.** Three things want to change the index: push events, the reconciliation, and the MCP write tools. Without an order between them, a reconciliation could delete the vectors of a note created while it ran, or re-index an old version over a newer one. So:
 
-- The **Queue consumer is the only component that writes to the index from events and reconciliation**. It runs one batch at a time (`max_concurrency: 1`).
+- The **Queue consumer is the only component that writes to the index.** Push events, reconciliation fixes and MCP writes (the tools enqueue the note after pushing, [ADR 007](007-cloudflare-artifacts-for-the-notes.md)) all go through the Queue. It runs one batch at a time (`max_concurrency: 1`).
 - **Every index write re-checks the note at the head of `main` right before acting:** if the note exists, index what was just read and record that sha; if it is gone, delete its vectors. Nothing acts on a sha remembered from earlier.
-- **Manifest writes are conditional** (compare-and-set on the sha), so the in-tool indexing of an MCP write and the consumer can't overwrite each other's newer row. The manifest is updated by every index write, not only by reconciliation (ADR 010, to be written).
+- **Manifest writes are conditional** (compare-and-set on the sha), so a late or retried message can't overwrite a newer row. The manifest is updated by every index write ([ADR 010](010-reconciliation-manifest-in-d1.md)).
 
 **Indexing each change: a Cloudflare Queue.**
 - The `pushed` events go to the Queue.
@@ -36,7 +36,7 @@ The two jobs have different shapes:
 **Reconciliation and full rebuild: a Cloudflare Workflow on a daily schedule** (Workflows support cron schedules natively), or started on demand. Each step's result is saved, so a failure resumes from the step that failed. Each run has a deterministic id (`reconcile-YYYY-MM-DD`, or the date plus `rebuild`), so a scheduled and an on-demand run can't overlap.
 
 1. **Snapshot the source:** the head commit of `main`, and every note at that commit with its content sha.
-2. **Snapshot the index:** read the manifest (note → sha → chunk count).
+2. **Snapshot the index:** read the manifest (note → sha → chunk count, [ADR 010](010-reconciliation-manifest-in-d1.md)).
 3. **Compare:** new notes, changed notes (different sha), orphans (in the manifest, not in the source).
 4. **Enqueue the fixes:** one Queue message per affected note, in batches of about 20 per step. The consumer applies them with the head re-check above, so a note that changed or reappeared since the snapshot is handled correctly.
 5. **Report:** how many notes needed fixing, **excluding notes changed after the snapshot commit** (those are in flight, not missed). A high number means events are being lost and raises a notification.
@@ -80,5 +80,5 @@ A **full rebuild** is the same Workflow, except the index snapshot comes from Ve
 - [ADR 007: Cloudflare Artifacts for the notes](007-cloudflare-artifacts-for-the-notes.md)
 - [ADR 008: One Durable Object per repository for writes](008-one-durable-object-per-repository.md)
 - [PRD v2](../prd/v2.md) (P3, P4)
-- ADR 010: the reconciliation manifest (to be written)
+- [ADR 010: The index manifest in D1](010-reconciliation-manifest-in-d1.md)
 - Issues [#6](https://github.com/YudiG12/second-brain-mcp/issues/6), [#7](https://github.com/YudiG12/second-brain-mcp/issues/7), [#8](https://github.com/YudiG12/second-brain-mcp/issues/8)
