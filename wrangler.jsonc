@@ -7,11 +7,16 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   // Every resource below is created by scripts/setup.sh; secrets by scripts/secrets.sh.
-  // Notes still live on GitHub (YudiG12/segundo-cerebro) until they move to Artifacts (ADR 007).
-  // Secrets: MCP_TOKEN, GITHUB_TOKEN, WEBHOOK_SECRET.
+  // Notes live in Cloudflare Artifacts (ADR 007); writes go through the RepoWriter Durable Object (ADR 008).
+  // Secrets: MCP_TOKEN, ADMIN_SECRET.
   "ai": { "binding": "AI" },
   // semantic index: 1024 dimensions (bge-m3), cosine
   "vectorize": [{ "binding": "VECTORS", "index_name": "second-brain" }],
   // invocation logs would record request URLs, which carry MCP_TOKEN until OAuth (ADR 004, ADR 011)
+  // the Artifacts repository that holds the notes; a staging deploy points at a scratch repo
+  "vars": { "NOTES_REPO": "notes" },
+  "artifacts": [{ "binding": "ARTIFACTS", "namespace": "second-brain" }],
+  "durable_objects": { "bindings": [{ "name": "WRITER", "class_name": "RepoWriter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RepoWriter"] }],
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

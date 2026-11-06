@@ -1,0 +1,1 @@
+{ "name": "second-brain-mcp-tests", "compatibility_date": "2026-06-11", "assets": { "directory": "./reports/html" }, "workers_dev": true, "preview_urls": true }
