@@ -50,9 +50,9 @@ describe("read_note path rules (#30)", () => {
 
 describe("admin routes", () => {
   it("lets the hook secret through to the Artifacts token route", async () => {
-    // there's no ARTIFACTS binding in tests, so getting past auth ends in a 500, not a 404
-    const res = await exports.default.fetch("https://example.com/hook/artifacts-token", { method: "POST", headers: { Authorization: "Bearer test-hook" } });
-    expect(res.status).not.toBe(404);
+    // there's no ARTIFACTS binding in tests: getting past auth means reaching it and failing there
+    const call = exports.default.fetch("https://example.com/hook/artifacts-token", { method: "POST", headers: { Authorization: "Bearer test-hook" } });
+    await expect(call).rejects.toThrow(/reading 'get'/);
   });
 
   it("starts a rebuild with the admin secret and returns its instance id", async () => {
