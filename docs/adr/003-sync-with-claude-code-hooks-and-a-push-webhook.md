@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted for v1; the GitHub-webhook part is superseded by [ADR 007](007-cloudflare-artifacts-for-the-notes.md) in v2 (push events into a Queue) |
 | **Date** | 2026-11-05 |
 | **Deciders** | Yudi Ganeko |
 
