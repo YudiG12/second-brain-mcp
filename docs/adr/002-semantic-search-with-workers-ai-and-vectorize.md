@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted; in v2, [ADR 012](012-hybrid-search-with-d1-fts5.md) replaces the separate keyword search with a hybrid `search_notes` (semantic search itself is unchanged) |
 | **Date** | 2026-11-05 |
 | **Deciders** | Yudi Ganeko |
 
