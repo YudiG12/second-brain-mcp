@@ -92,6 +92,63 @@ printf 'mac\n' > "$T/mac/ideias/a.md"
 out=$(bash "$HOOK" push 2>/dev/null)
 check "nothing on stdout" '[ -z "$out" ]'
 
+echo "interrupted: killed right after the reset (Mac asleep, hook timeout)"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+printf 'mac\n' > "$T/mac/ideias/a.md"; printf 'only here\n' > "$T/mac/ideias/only-local.md"
+NOTES_SYNC_TEST_DIE_AFTER_RESET=1 bash "$HOOK" push 2>/dev/null
+check "the local version is kept in refs/notes-sync/pending" 'git -C "$T/mac" rev-parse -q --verify refs/notes-sync/pending >/dev/null'
+bash "$HOOK" push 2>/dev/null
+check "the next run finishes the restore: only-local note reaches the remote" '[ "$(remote_file ideias/only-local.md)" = "only here" ]'
+check "and the conflict copy" 'git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "a.conflict"'
+check "the pending ref is cleared" '! git -C "$T/mac" rev-parse -q --verify refs/notes-sync/pending >/dev/null'
+
+echo "interrupted: left in the middle of a rebase, then more edits"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+(cd "$T/mac" && printf 'mac\n' > ideias/a.md && git commit -qam mac && git pull --rebase -q >/dev/null 2>&1)
+printf 'written after\n' > "$T/mac/ideias/after.md"
+bash "$HOOK" push 2>/dev/null
+check "recovers the clone from the stopped rebase" '[ ! -d "$T/mac/.git/rebase-merge" ] && [ ! -d "$T/mac/.git/rebase-apply" ]'
+check "the note written afterwards reaches the remote" '[ "$(remote_file ideias/after.md)" = "written after" ]'
+check "the stopped commit's version is kept as a copy" 'git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "a.conflict"'
+check "no conflict markers reach the remote" '! git -C "$T/remote.git" grep -q "<<<<<<<" main'
+
+echo "an edit made while the conflict is being resolved"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && printf 'b\n' > ideias/b.md && git add -A && git commit -qm phone && git push -q)
+bash "$HOOK" pull 2>/dev/null
+(cd "$T/other" && printf 'phone 2\n' > ideias/a.md && git commit -qam phone2 && git push -q)
+printf 'mac\n' > "$T/mac/ideias/a.md"
+NOTES_SYNC_TEST_BEFORE_ABORT='printf "edited meanwhile\n" > ideias/b.md' bash "$HOOK" push 2>/dev/null
+check "the edit is not wiped by the reset" '[ "$(remote_file ideias/b.md)" = "edited meanwhile" ] || [ "$(cat "$T/mac/ideias/b.md")" = "edited meanwhile" ]'
+
+echo "odd names and clashes"
+setup
+(cd "$T/other" && printf 'base\n' > ./-nota.md && git add -A && git commit -qm d && git push -q)
+bash "$HOOK" pull 2>/dev/null
+(cd "$T/other" && printf 'phone\n' > ./-nota.md && git commit -qam p && git push -q)
+printf 'mac\n' > "$T/mac/-nota.md"
+bash "$HOOK" push 2>/dev/null
+check "a name starting with a dash keeps the local version" 'git -C "$T/remote.git" ls-tree -r --name-only main | grep -q -- "-nota.conflict"'
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && printf 'a file\n' > proj && git add -A && git commit -qm p && git push -q)
+printf 'mac\n' > "$T/mac/ideias/a.md"; mkdir -p "$T/mac/proj"; printf 'n\n' > "$T/mac/proj/n.md"
+bash "$HOOK" push 2>"$T/err"; code=$?
+check "a file/folder clash fails loudly and keeps the local version" '[ $code = 1 ] && git -C "$T/mac" rev-parse -q --verify refs/notes-sync/pending >/dev/null && git -C "$T/mac" show refs/notes-sync/pending:proj/n.md | grep -q n'
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/img.png && git add -A && git commit -qm p && git push -q)
+printf 'mac\n' > "$T/mac/ideias/img.png"
+bash "$HOOK" push 2>/dev/null
+check "a non-Markdown conflict copy keeps its extension" 'git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "img.conflict-.*\.png$"'
+
+echo "no upstream"
+setup
+git -C "$T/mac" branch -q --unset-upstream
+printf 'x\n' > "$T/mac/ideias/x.md"
+bash "$HOOK" push 2>/dev/null; code=$?
+check "fails instead of silently not pushing" '[ $code = 1 ]'
+
 echo "concurrent sessions (#16)"
 setup
 for i in 1 2 3 4; do printf "n$i\n" > "$T/mac/ideias/p$i.md"; done
@@ -106,6 +163,13 @@ mkdir "$T/mac/.git/notes-sync.lock" && echo 999999 > "$T/mac/.git/notes-sync.loc
 printf 'x\n' > "$T/mac/ideias/s.md"
 bash "$HOOK" push; code=$?
 check "a lock whose process is gone is taken over" '[ $code = 0 ] && [ "$(remote_file ideias/s.md)" = "x" ]'
+
+echo "a long-running live owner keeps its lock"
+setup
+mkdir "$T/mac/.git/notes-sync.lock" && echo $$ > "$T/mac/.git/notes-sync.lock/pid" && touch -t 202001010000 "$T/mac/.git/notes-sync.lock"
+NOTES_SYNC_LOCK_WAIT=1 bash "$HOOK" push 2>/dev/null; code=$?
+check "an old lock whose pid is alive is not taken over" '[ $code = 1 ] && [ "$(cat "$T/mac/.git/notes-sync.lock/pid")" = "$$" ]'
+rm -rf "$T/mac/.git/notes-sync.lock"
 
 echo "busy lock"
 setup
