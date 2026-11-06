@@ -24,6 +24,25 @@ describe("routing", () => {
   });
 });
 
+// Calls an MCP tool over the Streamable HTTP endpoint and returns its text.
+async function callTool(name: string, args: Record<string, unknown>) {
+  const res = await exports.default.fetch("https://example.com/test-token/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+  });
+  const body = await res.text();
+  const data = body.split("\n").find((l) => l.startsWith("data:"))?.slice(5) ?? body;
+  return JSON.stringify(JSON.parse(data));
+}
+
+describe("read_note path rules (#30)", () => {
+  // There is no ARTIFACTS binding in tests: reaching storage would fail with a TypeError, not "Invalid path".
+  it.each(["../x.md", "a/../../b.md", "notes.txt", "a//b.md", "/x.md"])("refuses %j before touching storage", async (path) => {
+    expect(await callTool("read_note", { path })).toMatch(/Invalid path/);
+  });
+});
+
 describe("admin routes", () => {
   it.each([undefined, "Bearer wrong", "test-admin"])("hide /admin/artifacts-token without the admin secret (%s)", async (auth) => {
     const res = await exports.default.fetch("https://example.com/admin/artifacts-token", {

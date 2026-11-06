@@ -75,6 +75,12 @@ describe("Writer: operations", () => {
     expect(remote.history()).toHaveLength(1);
   });
 
+  it("creates a note only if it doesn't exist yet (#31)", async () => {
+    expect(await writer.run({ kind: "create", path: "new.md", content: "n" })).toMatchObject({ status: "ok" });
+    expect(await writer.run({ kind: "create", path: "a.md", content: "x" })).toMatchObject({ status: "failed", code: "exists" });
+    expect(remote.files()["a.md"]).toBe("alpha\n\nbeta\n");
+  });
+
   it("refuses to move onto an existing note", async () => {
     expect(await writer.run({ kind: "move", from: "a.md", to: "b.md" })).toMatchObject({ status: "failed" });
     expect(remote.history()).toHaveLength(0);

@@ -2,12 +2,19 @@ import type { Change, Operation, WorkingCopy, WriteResult } from "./types";
 
 const MAX_ATTEMPTS = 3; // pushes before giving up as busy (spec v2 §5.1)
 
-class OperationError extends Error {}
+class OperationError extends Error {
+  constructor(message: string, readonly code?: "exists") {
+    super(message);
+  }
+}
 
 /** Turns an operation into file changes, reading the working copy. Throws OperationError if it can't apply. */
 async function changesFor(op: Operation, read: (path: string) => Promise<string | null>): Promise<Change[]> {
   switch (op.kind) {
     case "write":
+      return [{ path: op.path, content: op.content }];
+    case "create":
+      if ((await read(op.path)) !== null) throw new OperationError(`${op.path} already exists`, "exists");
       return [{ path: op.path, content: op.content }];
     case "edit": {
       const current = await read(op.path);
@@ -32,7 +39,7 @@ async function changesFor(op: Operation, read: (path: string) => Promise<string 
 }
 
 function message(op: Operation) {
-  return op.kind === "move" ? `move: ${op.from} -> ${op.to}` : `${op.kind}: ${op.path}`;
+  return op.kind === "move" ? `move: ${op.from} -> ${op.to}` : `${op.kind === "create" ? "write" : op.kind}: ${op.path}`;
 }
 
 /**
@@ -61,7 +68,7 @@ export class Writer {
         commit = await this.copy.commit(changes, message(op));
       } catch (e) {
         if (!(e instanceof OperationError)) this.copy.drop(); // the copy may be half-written; nothing was committed if it's an OperationError
-        return { status: "failed", reason: e instanceof Error ? e.message : String(e) };
+        return { status: "failed", reason: e instanceof Error ? e.message : String(e), ...(e instanceof OperationError && e.code ? { code: e.code } : {}) };
       }
       const ok = { status: "ok" as const, commit, paths: changes.map((c) => c.path).sort(), changes };
       let outcome;

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { ArtifactsNotes, D1Manifest, VectorizeAdapter, WorkersAiEmbedder } from "./indexer/adapters";
 import { handle } from "./indexer/indexer";
 import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
-import { checkPath, ideaPath, norm } from "./lib/notes";
+import { checkPath, ideaPath, norm, withSuffix } from "./lib/notes";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
 
@@ -64,24 +64,27 @@ function writer() {
 
 // Sends one operation to the repository's writer, then enqueues the changed notes for indexing.
 // The Queue consumer is the only index writer (ADR 009); a failed enqueue doesn't fail the write.
-async function write(op: Operation, done: string): Promise<string> {
-  let r: WriteResult;
+/** Runs one operation on the repository's writer. A failed call to the object is an unknown outcome. */
+async function runOp(op: Operation): Promise<WriteResult> {
   try {
-    r = await writer().run(op);
+    return await writer().run(op);
   } catch (e) {
-    // the object may have reset mid-write (e.g. during a deploy): the push may or may not have landed.
-    // Enqueue anyway: indexing reads the head, so this is harmless if nothing landed.
-    await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
-    return `Not sure the change was saved (${String(e)}). Check with read_note before retrying.`;
+    // the object may have reset mid-write (e.g. during a deploy): the push may or may not have landed
+    return { status: "unknown", reason: String(e) };
   }
+}
+
+/** Describes a write result for the client, and enqueues the changed notes for indexing. */
+async function describe(r: WriteResult, op: Operation, done: string): Promise<string> {
   switch (r.status) {
     case "failed":
       return r.reason;
     case "busy":
       return "The notes are changing too fast right now; nothing was saved. Try again.";
     case "unknown":
+      // enqueue anyway: indexing reads the head, so this is harmless if nothing landed
       await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
-      return `Not sure the change was saved (${r.reason}). Check with read_note before retrying.`;
+      return `Not sure the change to ${opPaths(op).join(" and ")} was saved (${r.reason}). Check it with read_note before retrying.`;
   }
   const saved = `${done} (${r.commit.slice(0, 7)}). Searchable in a few seconds to a couple of minutes.`;
   try {
@@ -90,6 +93,10 @@ async function write(op: Operation, done: string): Promise<string> {
   } catch (e) {
     return `${saved}. Search will catch up later (enqueue failed: ${String(e)}).`;
   }
+}
+
+async function write(op: Operation, done: string): Promise<string> {
+  return describe(await runOp(op), op, done);
 }
 
 // ---------- MCP tools ----------
@@ -106,7 +113,10 @@ function createServer() {
   server.registerTool(
     "read_note",
     { description: "Reads a whole note by path (e.g. visao-geral.md, projetos/cafezinho.md).", inputSchema: { path: z.string() } },
-    async ({ path }) => text((await readNote(E.ARTIFACTS, path)) ?? `Note not found: ${path}`),
+    async ({ path }) => {
+      const p = checkPath(path); // same rules as writes (#30)
+      return text((await readNote(E.ARTIFACTS, p)) ?? `Note not found: ${p}`);
+    },
   );
 
   server.registerTool(
@@ -142,8 +152,16 @@ function createServer() {
     "save_idea",
     { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it. The local clone pulls it on the next session.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {
-      const path = ideaPath(title);
-      return text(await write({ kind: "write", path, content: `# ${title}\n\n${content}\n` }, `Saved: ${path}`));
+      // never overwrite another idea with the same title on the same day (#31): try -2, -3...
+      const base = await ideaPath(title);
+      const body = `# ${title}\n\n${content}\n`;
+      for (let n = 1; n <= 20; n++) {
+        const path = withSuffix(base, n);
+        const r = await runOp({ kind: "create", path, content: body });
+        if (r.status === "failed" && r.code === "exists") continue;
+        return text(await describe(r, { kind: "create", path, content: body }, `Saved: ${path}`));
+      }
+      return text(`Too many ideas named "${title}" today; nothing was saved. Use a different title.`);
     },
   );
 
