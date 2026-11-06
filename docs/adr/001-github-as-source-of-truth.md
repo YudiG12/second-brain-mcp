@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Superseded by [ADR 007](007-cloudflare-artifacts-for-the-notes.md) in v2 |
 | **Date** | 2026-11-05 |
 | **Deciders** | Yudi Ganeko |
 
