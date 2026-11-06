@@ -47,6 +47,51 @@ printf 'later\n' > "$T/mac/ideias/d.md"
 bash "$HOOK" push; code=$?
 check "sync keeps working afterwards" '[ $code = 0 ] && [ "$(remote_file ideias/d.md)" = "later" ]'
 
+echo "conflict on names with accents and spaces"
+setup
+(cd "$T/other" && printf 'base\n' > "ideias/visão.md" && printf 'base\n' > "ideias/minha nota.md" && git add -A && git commit -qm acc && git push -q)
+bash "$HOOK" pull
+(cd "$T/other" && printf 'phone\n' > "ideias/visão.md" && printf 'phone\n' > "ideias/minha nota.md" && git commit -qam phone && git push -q)
+printf 'mac\n' > "$T/mac/ideias/visão.md"; printf 'mac\n' > "$T/mac/ideias/minha nota.md"
+bash "$HOOK" push 2>/dev/null
+check "accented name: mac version kept as a copy" '[ "$(git -C "$T/remote.git" ls-tree -r --name-only -z main | tr "\0" "\n" | grep -c "conflict")" = 2 ]'
+check "accented name: the copies hold the mac text" 'for f in $(git -C "$T/remote.git" ls-tree -r --name-only main | grep -c x); do :; done; git -C "$T/remote.git" ls-tree -r --name-only -z main | tr "\0" "\n" | grep conflict | while IFS= read -r f; do [ "$(remote_file "$f")" = "mac" ] || exit 1; done'
+
+echo "conflict keeps local changes that didn't conflict"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && printf 'remote only\n' > ideias/r.md && git add -A && git commit -qm phone && git push -q)
+printf 'mac\n' > "$T/mac/ideias/a.md"; printf 'brand new\n' > "$T/mac/ideias/new.md"
+bash "$HOOK" push 2>/dev/null
+check "a new local note stays at its own path" '[ "$(remote_file ideias/new.md)" = "brand new" ]'
+check "a remote-only change is not copied" '! git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "r.conflict"'
+check "only the conflicting note gets a copy" '[ "$(git -C "$T/remote.git" ls-tree -r --name-only main | grep -c conflict)" = 1 ]'
+
+echo "conflict on pull with uncommitted edits"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+printf 'mac, not committed\n' > "$T/mac/ideias/a.md"; printf 'also local\n' > "$T/mac/ideias/u.md"
+bash "$HOOK" pull 2>/dev/null; code=$?
+check "pull reports the conflict" '[ $code = 1 ]'
+check "no conflict markers anywhere" '! grep -rq "<<<<<<<" "$T/mac/ideias" && ! git -C "$T/remote.git" grep -q "<<<<<<<" main'
+check "the uncommitted edit survives as a copy" 'ls "$T/mac/ideias" | grep -q "a.conflict" && [ "$(cat "$T/mac"/ideias/a.conflict-*.md)" = "mac, not committed" ]'
+check "the other uncommitted note survives" '[ "$(cat "$T/mac/ideias/u.md")" = "also local" ]'
+check "no stash left behind" '[ -z "$(git -C "$T/mac" stash list)" ]'
+
+echo "conflict across several local commits"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+(cd "$T/mac" && printf 'mac 1\n' > ideias/a.md && git commit -qam m1 && printf 'b\n' > ideias/b.md && git add -A && git commit -qm m2 && printf 'mac 3\n' > ideias/a.md && git commit -qam m3)
+bash "$HOOK" push 2>/dev/null
+check "the latest local version is the copy" '[ "$(remote_file "$(git -C "$T/remote.git" ls-tree -r --name-only main | grep a.conflict)")" = "mac 3" ]'
+check "the other local commit's note is kept" '[ "$(remote_file ideias/b.md)" = "b" ]'
+
+echo "quiet stdout (hook stdout goes into Claude's context)"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+printf 'mac\n' > "$T/mac/ideias/a.md"
+out=$(bash "$HOOK" push 2>/dev/null)
+check "nothing on stdout" '[ -z "$out" ]'
+
 echo "concurrent sessions (#16)"
 setup
 for i in 1 2 3 4; do printf "n$i\n" > "$T/mac/ideias/p$i.md"; done
