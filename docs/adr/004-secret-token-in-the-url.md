@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted for v1; to be replaced by OAuth in v2 |
+| **Status** | Accepted for v1; superseded by [ADR 011](011-oauth-with-github-login.md) in v2 |
 | **Date** | 2026-11-05 |
 | **Deciders** | Yudi Ganeko |
 
