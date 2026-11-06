@@ -12,7 +12,10 @@ Every push triggers the GitHub webhook, which re-indexes the changed notes.
 
 ## Install
 
-1. Clone the notes repo. By default the script expects it at `~/dev/agentes/cerebro/notas`; set `NOTES_DIR` to use another path.
+The script is written for macOS (it uses `stat -f`).
+
+
+1. Clone the notes repo. By default the script expects it at `~/dev/agentes/cerebro/notas`; set `NOTES_DIR` in the environment Claude Code runs hooks with to use another path.
 2. Link the script into Claude Code's hooks folder, so this repo stays the single source:
    ```sh
    mkdir -p ~/.claude/hooks

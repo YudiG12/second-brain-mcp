@@ -31,7 +31,7 @@ Any request without the exact prefix gets **404 Not found**, not 401, so the end
 - Simple: one secret, one check in the router.
 
 **Costs**
-- **Leaks easily.** A URL ends up in places a header doesn't: logs, browser history, screenshots, and the config of every client it was pasted into. A leaked URL gives full access; the 404 doesn't help.
+- **Leaks easily.** A URL ends up in places a header doesn't: logs, browser history, screenshots, the config of every client it was pasted into, and **GitHub's webhook settings and delivery logs**, since the webhook URL contains the same token. A leaked URL gives full access; the 404 doesn't help.
 - **All or nothing.** Whoever has the URL can read, edit and delete every note. Mitigated by [ADR 001](001-github-as-source-of-truth.md): every change is a commit and can be undone.
 - **No identity.** The server can't tell who is calling, so there is no per-user access control and no audit of who did what.
 - **Never expires.** The token is valid until it is rotated by hand.

@@ -14,7 +14,7 @@ The first plan was Terraform. Checking the Cloudflare provider (v5.28.1) showed 
 
 | Resource | Terraform provider |
 |---|---|
-| Worker and bindings, Queue and consumer, Workflow, D1, Cron Trigger | Supported |
+| Worker and bindings, Queue and consumer, Workflow, D1, Cron Trigger, KV | Supported |
 | **Vectorize index** | Not supported |
 | **Artifacts repository** | Not supported |
 | **Account Workers subdomain** | Not supported |
@@ -25,7 +25,7 @@ The infrastructure also changes rarely: it is created once and touched only when
 
 ## Decision
 
-- **`wrangler.jsonc` is the declaration** of the Worker and everything it binds to: Workers AI, Vectorize, D1, the Queue, the Workflow and the Cron Trigger.
+- **`wrangler.jsonc` is the declaration** of the Worker and everything it binds to: Workers AI, Vectorize, the Durable Object class and its migrations, the Queue, the Workflow, the Cron Trigger, and the stores still being decided in v2 ADRs (a D1 database for the index manifest, a KV namespace for OAuth).
 - **An idempotent `scripts/setup.sh`** creates what Wrangler doesn't create on deploy (the Vectorize index, the D1 database, the Queue, the Artifacts repository) and checks the account subdomain. Running it twice changes nothing.
 - **Secrets** are set with `wrangler secret put` and never stored in the repo.
 - **Deploys** run from CI with `wrangler deploy` on merge to `main`.
@@ -34,7 +34,7 @@ The infrastructure also changes rarely: it is created once and touched only when
 
 | Alternative | Why not |
 |---|---|
-| **Terraform for the supported resources, a script for the rest** | Two tools for one small system, a remote state to host and protect (HCP Terraform or an R2 backend), and a Cloudflare token in CI, to manage five resources that `wrangler.jsonc` already declares. The resources Terraform can't manage are the critical ones. |
+| **Terraform for the supported resources, a script for the rest** | Two tools for one small system, and a remote state to host, lock and protect (HCP Terraform or an R2 backend), to manage a handful of resources that `wrangler.jsonc` already declares. The resources Terraform can't manage are the critical ones. |
 | **Terraform only** | Not possible: the provider doesn't cover Vectorize, Artifacts or the account subdomain. |
 | **Keep creating resources by hand** (v1) | Nothing reproducible, nothing reviewable. |
 
