@@ -1,0 +1,82 @@
+{
+  "server": "https://second-brain-mcp.yudiganeko.workers.dev",
+  "date": "2026-11-06T22:23:44Z",
+  "runs": 10,
+  "note": "Seconds, measured from the Mac, including network. Nearest-rank percentiles, indicative at n=10. Searches are warm.",
+  "notes_in_repo": 28,
+  "write_note": {
+    "n": 10,
+    "p50": 4.11,
+    "p90": 4.43,
+    "max": 4.56,
+    "samples": [
+      4.56,
+      3.92,
+      4.26,
+      4.2,
+      4.11,
+      4.16,
+      4.43,
+      4.07,
+      3.98,
+      3.96
+    ]
+  },
+  "write_to_searchable": {
+    "n": 9,
+    "p50": 122.0,
+    "p90": 162.0,
+    "max": 162.0,
+    "samples": [
+      48.0,
+      134.0,
+      83.0,
+      162.0,
+      149.0,
+      77.0,
+      139.0,
+      122.0,
+      117.0
+    ],
+    "never_visible": 1,
+    "resolution_s": "about \u00b14.5 (3 s sleep + one query per poll)",
+    "gave_up_after_s": 600.0
+  },
+  "search_notes": {
+    "n": 10,
+    "p50": 2.76,
+    "p90": 3.06,
+    "max": 3.07,
+    "samples": [
+      2.8,
+      2.72,
+      2.72,
+      2.73,
+      2.78,
+      2.75,
+      2.76,
+      3.06,
+      2.99,
+      3.07
+    ]
+  },
+  "semantic_search": {
+    "n": 10,
+    "p50": 1.43,
+    "p90": 1.93,
+    "max": 2.4,
+    "samples": [
+      1.38,
+      2.4,
+      1.39,
+      1.58,
+      1.53,
+      1.38,
+      1.43,
+      1.38,
+      1.46,
+      1.93
+    ]
+  },
+  "contamination": "Run 6 is excluded from write_to_searchable: a parallel Claude Code session deleted its note mid-run (commit 2b5d4f7). From run 6 on, a second copy of this script ran for a while, so at times one extra _bench note existed."
+}
