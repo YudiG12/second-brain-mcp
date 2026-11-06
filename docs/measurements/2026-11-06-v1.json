@@ -1,0 +1,33 @@
+{
+  "server": "https://second-brain-mcp.yudiganeko.workers.dev",
+  "date": "2026-11-06T21:46:21Z",
+  "runs": 10,
+  "note": "Times in seconds, measured from the Mac, including network.",
+  "write_note": {
+    "n": 10,
+    "p50": 4.33,
+    "p90": 4.83,
+    "max": 5.11
+  },
+  "write_to_searchable": {
+    "n": 10,
+    "p50": 111.14,
+    "p90": 162.76,
+    "max": 204.7,
+    "never_visible": 0,
+    "poll_every_s": 3.0,
+    "gave_up_after_s": 600.0
+  },
+  "search_notes": {
+    "n": 10,
+    "p50": 3.11,
+    "p90": 3.34,
+    "max": 3.36
+  },
+  "semantic_search": {
+    "n": 10,
+    "p50": 1.42,
+    "p90": 1.49,
+    "max": 1.52
+  }
+}
