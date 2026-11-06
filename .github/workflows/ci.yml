@@ -16,6 +16,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # the test report comment
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -26,6 +29,26 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Publish the Vitest UI report
+        id: ui
+        if: always() && github.event_name == 'pull_request' && hashFiles('reports/html/index.html') != ''
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx wrangler versions upload -c reports.wrangler.jsonc --preview-alias "pr-${{ github.event.pull_request.number }}" >/dev/null
+          echo "url=https://pr-${{ github.event.pull_request.number }}-second-brain-mcp-tests.yudiganeko.workers.dev" >> "$GITHUB_OUTPUT"
+      - name: Post the test report on the PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('reports/tests.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          UI_URL: ${{ steps.ui.outputs.url }}
+        run: |
+          node scripts/test-report.mjs reports/tests.json > report.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- test-report -->")) | .id' | tail -1)
+          if [ -n "$id" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@report.md >/dev/null; else gh pr comment "$PR" --body-file report.md; fi
 
   deploy:
     needs: test
