@@ -1,11 +1,10 @@
 {
-  "name": "cerebro-mcp",
+  "name": "second-brain-mcp",
   "private": true,
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "types": "wrangler types",
-    "sync": "./sync.sh"
+    "types": "wrangler types"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",
