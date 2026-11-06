@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cerebro-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
+  // as notas ficam no GitHub (YudiG12/segundo-cerebro); secrets: GITHUB_TOKEN, WEBHOOK_SECRET, MCP_TOKEN
+  // modelo de embedding multilíngue (as notas são em português)
+  "ai": { "binding": "AI" },
+  // índice de busca por sentido: 1024 dimensões, cosseno. Caminhos relativos à raiz do repositório.
+  "vectorize": [{ "binding": "VECTORS", "index_name": "segundo-cerebro" }]
+}
