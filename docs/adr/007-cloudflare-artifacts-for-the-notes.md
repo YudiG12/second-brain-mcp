@@ -35,7 +35,7 @@ A half-day spike on a throwaway namespace, deleted afterwards:
 Move the notes from GitHub to an Artifacts repository.
 
 - **Reads:** the Worker reads through the Artifacts binding. No token.
-- **Writes:** through Git, from a Durable Object that owns the repository ([ADR 008](008-one-durable-object-per-repository.md)).
+- **Writes:** through Git, from a Durable Object that owns the repository (ADR 008, to be written).
 - **Indexing:** subscribe the repository's `pushed` events to a Queue. The indexer diffs the `before` and `after` trees (`readCommit` + `readTree`, only descending into changed subtrees) to find added, modified and removed notes.
 - **The Mac:** keeps a Git clone with the Artifacts remote. The sync hook asks the Worker for a fresh repo-scoped token instead of storing a long-lived one.
 
