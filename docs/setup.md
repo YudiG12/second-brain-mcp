@@ -5,16 +5,16 @@ How to recreate the infrastructure from this repo ([ADR 006](adr/006-wrangler-an
 ## Requirements
 - Node 24 or later (`.nvmrc`), then `npm ci`.
 - `npx wrangler login` with access to the Cloudflare account in `wrangler.jsonc`.
-- `gh auth login` with admin access to the notes repository (for the webhook).
 
 ## Steps
-1. **Resources:** `scripts/setup.sh`. Creates what is missing and is safe to run again. Changing an existing Workers subdomain is a dashboard step; the script stops and says so.
+1. **Resources:** `scripts/setup.sh`. Creates what is missing (Vectorize index, Artifacts repo `notes`) and is safe to run again. Changing an existing Workers subdomain is a dashboard step; the script stops and says so.
 2. **Deploy:** `npx wrangler deploy` the first time (the Worker must exist before it has secrets). After that, merges to `main` deploy through CI.
 3. **Secrets:**
-   - `scripts/secrets.sh rotate`: new `MCP_TOKEN` and `WEBHOOK_SECRET`, saved to `.dev.vars` (gitignored) first, then to the Worker, then the GitHub webhook is pointed at the new URL. It asks for confirmation, since every client must reconnect. If the webhook step fails, `scripts/secrets.sh webhook` retries it without rotating again.
-   - `scripts/secrets.sh github`: copy a fine-grained GitHub token (Contents read and write on the notes repo) and run it; the script tests it, saves it and clears the clipboard.
-4. **Index:** `POST /<MCP_TOKEN>/reindex` once.
-5. **Clients:** reconnect each MCP client to `https://second-brain-mcp.yudiganeko.workers.dev/<MCP_TOKEN>/mcp`.
+   - `scripts/secrets.sh rotate`: new `MCP_TOKEN`, saved to `.dev.vars` (gitignored) first, then to the Worker. It asks for confirmation, since every client must reconnect.
+   - `scripts/secrets.sh admin`: new `ADMIN_SECRET`, saved to the Worker, `.dev.vars` and the macOS Keychain (the Mac sync hook reads it there).
+4. **Notes:** push the full history into the Artifacts repo once (`git push <remote> main` from a clone, with a token from `npx wrangler artifacts repos issue-token notes --namespace second-brain --scope write`), then point the Mac clone at it: `git remote set-url origin <remote>`.
+5. **Index:** `POST /<MCP_TOKEN>/reindex` once.
+6. **Clients:** reconnect each MCP client to `https://second-brain-mcp.yudiganeko.workers.dev/<MCP_TOKEN>/mcp`.
 
 ## CI deploy
 The `deploy` job in `.github/workflows/ci.yml` runs on pushes to `main` after the tests. It needs a repository secret `CLOUDFLARE_API_TOKEN`: a Cloudflare API token with the **Edit Cloudflare Workers** template, limited to this account. Set it with `gh secret set CLOUDFLARE_API_TOKEN`.

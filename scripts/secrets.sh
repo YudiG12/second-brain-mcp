@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# Sets the Worker's secrets without printing them or putting them on a command line.
-#   scripts/secrets.sh github          reads a GitHub token from the clipboard, checks it, saves it, clears the clipboard
-#   scripts/secrets.sh rotate [--yes]  new MCP_TOKEN and WEBHOOK_SECRET: saved to .dev.vars first, then to the Worker,
-#                                      then the webhook. Every client is cut off until it reconnects.
-#   scripts/secrets.sh webhook         points the GitHub webhook at the URL and secret in .dev.vars (safe to retry)
+# Sets the Worker's secrets without printing them. Values are saved to .dev.vars (gitignored) first.
+#   scripts/secrets.sh rotate [--yes]  new MCP_TOKEN. Every MCP client is cut off until it reconnects.
+#   scripts/secrets.sh admin           new ADMIN_SECRET: saved to .dev.vars, the Worker and the macOS Keychain
+#                                      (service "second-brain-admin", read by the Mac sync hook)
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")/.."
 
-NOTES_REPO="YudiG12/segundo-cerebro"
 WORKER_URL="https://second-brain-mcp.yudiganeko.workers.dev"
 
 # value goes through stdin, never argv
@@ -26,40 +24,23 @@ PY
 }
 getvar() { grep "^$1=" .dev.vars | cut -d= -f2-; }
 
-webhook() {
-  local token secret hook body
-  token=$(getvar MCP_TOKEN); secret=$(getvar WEBHOOK_SECRET)
-  [ -n "$token" ] && [ -n "$secret" ] || { echo "MCP_TOKEN or WEBHOOK_SECRET missing in .dev.vars"; exit 1; }
-  body=$(URL="$WORKER_URL/$token/github-webhook" SECRET="$secret" python3 -c 'import json,os;print(json.dumps({"config":{"url":os.environ["URL"],"content_type":"json","secret":os.environ["SECRET"]},"events":["push"],"active":True}))')
-  if ! hook=$(gh api "repos/$NOTES_REPO/hooks" --jq '.[] | select(.config.url | test("github-webhook")) | .id' | head -1) \
-    || ! if [ -n "$hook" ]; then printf '%s' "$body" | gh api -X PATCH "repos/$NOTES_REPO/hooks/$hook" --input - >/dev/null
-         else printf '%s' "$body" | gh api -X POST "repos/$NOTES_REPO/hooks" --input - >/dev/null; fi; then
-    echo "ERROR: webhook NOT updated. Pushes won't re-index. Fix gh access, then run: scripts/secrets.sh webhook"; exit 1
-  fi
-  echo "ok: webhook ${hook:-created}"
-}
-
 case "${1:-}" in
-  github)
-    T=$(pbpaste | tr -d '[:space:]')
-    case "$T" in github_pat_*|ghp_*) ;; *) echo "The clipboard does not hold a GitHub token (github_pat_...)."; exit 1;; esac
-    code=$(printf 'header = "Authorization: Bearer %s"\n' "$T" | curl -s -o /dev/null -w "%{http_code}" --config - "https://api.github.com/repos/$NOTES_REPO/contents/")
-    [ "$code" = 200 ] || { echo "GitHub rejected the token (HTTP $code): it needs Contents access to $NOTES_REPO."; exit 1; }
-    put GITHUB_TOKEN "$T"
-    pbcopy </dev/null; echo "Clipboard cleared."
-    ;;
   rotate)
     if [ "${2:-}" != "--yes" ]; then
       read -r -p "This cuts off every MCP client until it reconnects. Continue? [y/N] " ok; [ "$ok" = y ] || exit 1
     fi
     setvar MCP_TOKEN "$(openssl rand -hex 24)"
-    setvar WEBHOOK_SECRET "$(openssl rand -hex 32)"
     printf '%s\n' "$WORKER_URL" > .worker-url
     put MCP_TOKEN "$(getvar MCP_TOKEN)"
-    put WEBHOOK_SECRET "$(getvar WEBHOOK_SECRET)"
-    webhook
     echo "New MCP URL: $WORKER_URL/<MCP_TOKEN from .dev.vars>/mcp. Reconnect the clients."
     ;;
-  webhook) webhook ;;
-  *) echo "usage: scripts/secrets.sh github | rotate [--yes] | webhook"; exit 1;;
+  admin)
+    setvar ADMIN_SECRET "$(openssl rand -hex 32)"
+    put ADMIN_SECRET "$(getvar ADMIN_SECRET)"
+    # `security` only takes the value as an argument (briefly visible to local processes); fine on a single-user Mac
+    security add-generic-password -U -s second-brain-admin -a "$USER" -w "$(getvar ADMIN_SECRET)"
+    security delete-generic-password -s second-brain-artifacts-token >/dev/null 2>&1 || true
+    echo "ok: ADMIN_SECRET in the Keychain"
+    ;;
+  *) echo "usage: scripts/secrets.sh rotate [--yes] | admin"; exit 1;;
 esac

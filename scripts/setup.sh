@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 ACCOUNT_ID="337de6b8e4de301a53ecae0c06afcc72"
 SUBDOMAIN="yudiganeko"
 INDEX="second-brain"
+NAMESPACE="second-brain"
+NOTES_REPO="notes"
 
 wr() { npx --no-install wrangler "$@"; }
 api() { # Cloudflare API with the same credentials Wrangler uses; the token goes through stdin, never argv
@@ -19,6 +21,14 @@ if wr vectorize get "$INDEX" >/dev/null 2>&1; then
   echo "ok: exists"
 else
   wr vectorize create "$INDEX" --dimensions 1024 --metric cosine
+fi
+
+echo "== Artifacts repo $NAMESPACE/$NOTES_REPO"
+if wr artifacts repos get "$NOTES_REPO" --namespace "$NAMESPACE" >/dev/null 2>&1; then
+  echo "ok: exists"
+else
+  wr artifacts repos create "$NOTES_REPO" --namespace "$NAMESPACE" >/dev/null
+  echo "ok: created (empty; push the notes' history into it, see docs/setup.md)"
 fi
 
 # Last, because changing it breaks every URL on the old subdomain at once.
