@@ -22,21 +22,26 @@ The two jobs have different shapes:
 
 ## Decision
 
+**One writer for the index: the Queue consumer.** Three things want to change the index: the Queue consumer (push events), the reconciliation, and the write tools themselves (ADR 007 keeps in-tool indexing for MCP writes). Without an order between them, a reconciliation could delete the vectors of a note created while it ran, or re-index an old version over a newer one. So:
+
+- The **Queue consumer is the only component that writes to the index from events and reconciliation**. It runs one batch at a time (`max_concurrency: 1`).
+- **Every index write re-checks the note at the head of `main` right before acting:** if the note exists, index what was just read and record that sha; if it is gone, delete its vectors. Nothing acts on a sha remembered from earlier.
+- **Manifest writes are conditional** (compare-and-set on the sha), so the in-tool indexing of an MCP write and the consumer can't overwrite each other's newer row. The manifest is updated by every index write, not only by reconciliation (ADR 010, to be written).
+
 **Indexing each change: a Cloudflare Queue.**
-- The `pushed` events go to the Queue. One consumer runs at a time (`max_concurrency: 1`), as ADR 007 requires for ordering.
-- A failed message is retried with growing delays, up to 5 times. After that it goes to a **dead-letter queue**, and anything landing there raises an alert.
-- The consumer's work is idempotent (stable ids, upserts, read at the head of `main`), so a retry never duplicates or regresses anything.
+- The `pushed` events go to the Queue.
+- A failed message is retried up to 5 times (`max_retries: 5`; the default is 3) with growing delays: the consumer calls `msg.retry({ delaySeconds })` with a delay that doubles each attempt.
+- After the last retry, the message goes to a **dead-letter queue**. A small consumer on the dead-letter queue sends a notification and keeps the message for manual replay (a dead-letter queue has no alert of its own, and without a consumer its messages are deleted after 4 days).
 
-**Reconciliation and full rebuild: a Cloudflare Workflow**, started daily by a Cron Trigger, or on demand. Each step's result is saved, so a failure resumes from the step that failed:
+**Reconciliation and full rebuild: a Cloudflare Workflow on a daily schedule** (Workflows support cron schedules natively), or started on demand. Each step's result is saved, so a failure resumes from the step that failed. Each run has a deterministic id (`reconcile-YYYY-MM-DD`, or the date plus `rebuild`), so a scheduled and an on-demand run can't overlap.
 
-1. **Snapshot the source:** list every note at the head of `main`, with its content sha.
-2. **Snapshot the index:** read the manifest (note → sha → chunk count, ADR 010, to be written).
-3. **Compare:** new notes (not in the manifest), changed notes (different sha), orphans (in the manifest, not in the source).
-4. **Re-index in batches** of about 20 notes, one step per batch: read, embed, upsert, update the manifest.
-5. **Delete orphans:** their vectors and their manifest rows.
-6. **Report:** how many notes were fixed. A high number means events are being lost and raises an alert.
+1. **Snapshot the source:** the head commit of `main`, and every note at that commit with its content sha.
+2. **Snapshot the index:** read the manifest (note → sha → chunk count).
+3. **Compare:** new notes, changed notes (different sha), orphans (in the manifest, not in the source).
+4. **Enqueue the fixes:** one Queue message per affected note, in batches of about 20 per step. The consumer applies them with the head re-check above, so a note that changed or reappeared since the snapshot is handled correctly.
+5. **Report:** how many notes needed fixing, **excluding notes changed after the snapshot commit** (those are in flight, not missed). A high number means events are being lost and raises a notification.
 
-A **full rebuild** is the same Workflow with an empty index snapshot: everything is "new", and orphans are found through Vectorize's `list-vectors`. This replaces v1's `/reindex`, which never cleaned up ([#8](https://github.com/YudiG12/second-brain-mcp/issues/8)).
+A **full rebuild** is the same Workflow, except the index snapshot comes from Vectorize instead of the manifest: `list-vectors` returns every id, and orphans are the ids not expected from the source (ids are `hash(path)-seq`, so the comparison is a set difference against the expected ids). `list-vectors` is only available through the REST API and Wrangler, not the binding, so the Workflow needs a Cloudflare API token with Vectorize read access as a secret. The rebuild then rewrites the manifest from what it enqueued. This replaces v1's `/reindex`, which never cleaned up ([#8](https://github.com/YudiG12/second-brain-mcp/issues/8)).
 
 ## Alternatives considered
 
@@ -46,6 +51,8 @@ A **full rebuild** is the same Workflow with an empty index snapshot: everything
 | **A Workflow for both** (Artifacts events can start a Workflow directly) | Works, but each push becomes a Workflow instance with step overhead and step billing, for a job that is one atomic task. |
 | **A plain Cron-triggered Worker for reconciliation** | No resume: a failure in the middle restarts everything, and one invocation has CPU and subrequest limits that a large repository can hit. |
 | **No reconciliation, just retries** | Retries only cover messages that reach the Queue; events that never arrive would still be lost. |
+| **The Workflow writes to the index itself** | A second writer racing the consumer: it could delete a note created mid-run or regress one that changed. Enqueueing keeps a single writer. |
+| **Blue/green rebuild** (build a fresh index, then switch the binding) | Avoids a half-rebuilt index, but needs a deploy to switch and doubles storage during the build; the enqueue-based rebuild keeps serving search throughout. |
 
 ## Consequences
 
@@ -59,15 +66,19 @@ A **full rebuild** is the same Workflow with an empty index snapshot: everything
 - **Two mechanisms** to configure, monitor and test instead of one.
 - **Workflow billing:** steps and storage (500,000 steps a month included on Workers Paid). One user's daily run is a few dozen steps.
 - **Every step must be idempotent,** because Workflows and Queues both re-run work after failures.
+- **A Cloudflare API token** for the rebuild's `list-vectors` call: one more secret.
+- **Fixes from reconciliation are not instant:** they go through the same Queue as everything else.
 - **Up to a day of staleness** for an event that never arrives.
 
 ## Revisit when
 
 - The report shows frequent fixes: run reconciliation more often, or investigate event delivery.
-- The corpus grows enough that a full snapshot each day is expensive: reconcile incrementally (only notes changed since the last run).
+- The corpus grows enough that a full snapshot each day is expensive: reconcile incrementally (only notes changed since the last run). A Workflow step's return value is also capped at 1 MiB, so very large note lists would have to be stored outside the step result.
 
 ## Related
 
 - [ADR 007: Cloudflare Artifacts for the notes](007-cloudflare-artifacts-for-the-notes.md)
+- [ADR 008: One Durable Object per repository for writes](008-one-durable-object-per-repository.md)
+- [PRD v2](../prd/v2.md) (P3, P4)
 - ADR 010: the reconciliation manifest (to be written)
 - Issues [#6](https://github.com/YudiG12/second-brain-mcp/issues/6), [#7](https://github.com/YudiG12/second-brain-mcp/issues/7), [#8](https://github.com/YudiG12/second-brain-mcp/issues/8)
