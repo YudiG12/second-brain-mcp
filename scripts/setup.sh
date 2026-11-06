@@ -46,4 +46,4 @@ else
   exit 1
 fi
 
-echo "Done. Next: npx wrangler deploy (first time), then scripts/secrets.sh rotate and github. See docs/setup.md."
+echo "Done. Next: push the notes history (first time), npx wrangler deploy, then scripts/secrets.sh rotate and admin. See docs/setup.md."
