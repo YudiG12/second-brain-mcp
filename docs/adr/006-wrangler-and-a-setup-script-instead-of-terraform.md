@@ -25,8 +25,8 @@ The infrastructure also changes rarely: it is created once and touched only when
 
 ## Decision
 
-- **`wrangler.jsonc` is the declaration** of the Worker and everything it binds to: Workers AI, Vectorize, the Durable Object class and its migrations, the Queue, the Workflow, the Cron Trigger, and the stores still being decided in v2 ADRs (a D1 database for the index manifest, a KV namespace for OAuth).
-- **An idempotent `scripts/setup.sh`** creates what Wrangler doesn't create on deploy (the Vectorize index, the Queue, the Artifacts repository, and the D1 database and KV namespace once their ADRs land) and checks the account subdomain. Running it twice changes nothing.
+- **`wrangler.jsonc` is the declaration** of the Worker and everything it binds to: Workers AI, Vectorize, the Durable Object class and its migrations, the Queue, the Workflow, the Cron Trigger, and a D1 database for the index manifest ([ADR 010](010-index-manifest-in-d1.md)) and a KV namespace for OAuth (ADR 011, to be written).
+- **An idempotent `scripts/setup.sh`** creates what Wrangler doesn't create on deploy (the Vectorize index, the Queue, the Artifacts repository, the D1 database, and the KV namespace once ADR 011 lands) and checks the account subdomain. Running it twice changes nothing.
 - **Secrets** are set with `wrangler secret put` and never stored in the repo.
 - **Deploys** run from CI with `wrangler deploy` on merge to `main`.
 
