@@ -1,5 +1,5 @@
 // Yudi's second brain as a remote MCP server.
-// GitHub (YudiG12/segundo-cerebro) stores the notes: it is the source of truth, with full history.
+// GitHub (YudiG12/segundo-cerebro, until v2 moves them to Artifacts) stores the notes: it is the source of truth, with full history.
 // Vectorize is only an index on top, updated by the push webhook and rebuildable at any time.
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
