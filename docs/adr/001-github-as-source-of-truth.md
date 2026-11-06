@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted for v1; superseded by [ADR 007](007-cloudflare-artifacts-for-the-notes.md) in v2 |
 | **Date** | 2026-11-05 |
 | **Deciders** | Yudi Ganeko |
 
@@ -44,7 +44,7 @@ Vectorize stays a derived index that can be rebuilt from the repository at any t
 
 ## Revisit when
 
-- **The notes move to Cloudflare Artifacts (planned for v2).** Artifacts is Git inside Cloudflare: it keeps history, diffs and deletions while removing the token, the rate limit and the external call. That would replace this decision.
+- **The notes move to Cloudflare Artifacts (planned for v2).** Artifacts is Git inside Cloudflare: it keeps history, diffs and deletions while removing the GitHub token, GitHub's rate limits and the webhook (it has short-lived tokens and limits of its own; see ADR 007). That would replace this decision.
 - Security requirements tighten to the point where notes must not leave the Cloudflare account.
 
 ## Related
