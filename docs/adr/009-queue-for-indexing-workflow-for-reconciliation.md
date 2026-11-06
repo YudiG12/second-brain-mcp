@@ -34,7 +34,7 @@ The two jobs have different shapes:
 - A failed message is retried up to 5 times (`max_retries: 5`; the default is 3) with growing delays: the consumer calls `msg.retry({ delaySeconds })` with a delay that doubles each attempt.
 - After the last retry, the message goes to a **dead-letter queue**. A small consumer on the dead-letter queue sends a notification and keeps the message for manual replay (a dead-letter queue has no alert of its own, and without a consumer its messages are deleted after 4 days).
 
-**Reconciliation and full rebuild: a Cloudflare Workflow on a daily schedule** (Workflows support cron schedules natively), or started on demand. Each step's result is saved, so a failure resumes from the step that failed. Each run has a deterministic id (`reconcile-YYYY-MM-DD`, or the date plus `rebuild`), so a scheduled and an on-demand run can't overlap.
+**Reconciliation and full rebuild: a Cloudflare Workflow on a daily schedule** (Workflows support cron schedules natively), or started on demand. Each step's result is saved, so a failure resumes from the step that failed. Two runs may overlap (a scheduled and an on-demand one); that is safe because the Workflow only enqueues and the Queue consumer re-checks each path at head.
 
 1. **Snapshot the source:** the head commit of `main`, and every note at that commit with its content sha.
 2. **Snapshot the index:** read the manifest (note → sha → chunk count, [ADR 010](010-index-manifest-in-d1.md)).
