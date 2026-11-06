@@ -63,9 +63,14 @@ describe("Writer: concurrency (#5, ADR 008)", () => {
 });
 
 describe("Writer: operations", () => {
+  it("returns the written content, so callers index what was committed", async () => {
+    const r = await writer.run({ kind: "edit", path: "a.md", oldText: "alpha", newText: "ALPHA" });
+    expect(r).toMatchObject({ status: "ok", changes: [{ path: "a.md", content: "ALPHA\n\nbeta\n" }] });
+  });
+
   it("moves a note in a single commit (#10)", async () => {
     const r = await writer.run({ kind: "move", from: "b.md", to: "c.md" });
-    expect(r).toMatchObject({ status: "ok", paths: ["b.md", "c.md"] });
+    expect(r).toMatchObject({ status: "ok", paths: ["b.md", "c.md"], changes: [{ path: "b.md", content: null }, { path: "c.md", content: "bravo\n" }] });
     expect(remote.files()).toEqual({ "a.md": "alpha\n\nbeta\n", "c.md": "bravo\n" });
     expect(remote.history()).toHaveLength(1);
   });
@@ -93,11 +98,39 @@ describe("Writer: operations", () => {
 });
 
 describe("Writer: failures (confirm before reporting)", () => {
-  it("reports ok when the push response was lost but the commit landed", async () => {
+  it("reports ok, with the changed paths, when the push response was lost but the commit landed", async () => {
     copy.failNextPush = "error-landed";
     const r = await writer.run({ kind: "write", path: "x.md", content: "x" });
-    expect(r.status).toBe("ok");
+    expect(r).toMatchObject({ status: "ok", paths: ["x.md"] });
     expect(remote.files()["x.md"]).toBe("x");
+  });
+
+  it("still reports ok when the Mac pushed on top of the landed commit", async () => {
+    copy.failNextPush = "error-landed";
+    copy.beforeConfirm = () => remote.pushFromElsewhere({ "m.md": "mac" });
+    const r = await writer.run({ kind: "write", path: "x.md", content: "x" });
+    expect(r.status).toBe("ok");
+  });
+
+  it("reports failed, not unknown, when it breaks before pushing", async () => {
+    copy.failCommit = true;
+    const r = await writer.run({ kind: "write", path: "x.md", content: "x" });
+    expect(r.status).toBe("failed");
+    copy.failCommit = false;
+    expect((await writer.run({ kind: "write", path: "y.md", content: "y" })).status).toBe("ok");
+  });
+
+  it("reports failed when the first clone fails", async () => {
+    copy.failSync = true;
+    expect((await writer.run({ kind: "write", path: "x.md", content: "x" })).status).toBe("failed");
+  });
+
+  it("doesn't fetch again after an operation that can't apply", async () => {
+    await writer.run({ kind: "write", path: "x.md", content: "x" });
+    const before = copy.syncs;
+    await writer.run({ kind: "delete", path: "nope.md" });
+    expect(copy.syncs).toBe(before);
+    expect((await writer.run({ kind: "write", path: "y.md", content: "y" })).status).toBe("ok");
   });
 
   it("reports failed when the push errored and the commit is not on the remote", async () => {

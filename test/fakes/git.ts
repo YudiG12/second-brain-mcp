@@ -47,9 +47,12 @@ export class FakeWorkingCopy implements WorkingCopy {
   syncs = 0;
   /** Run before the next push reaches the remote: lets a test move the remote in between. */
   beforePush: (() => void) | null = null;
+  /** Runs after a lost push response, before the writer checks the remote (e.g. the Mac pushes on top). */
+  beforeConfirm: (() => void) | null = null;
   /** "error-landed": the push lands but the response is lost. "error": it doesn't land. */
   failNextPush: "error-landed" | "error" | null = null;
   failSync = false;
+  failCommit = false;
 
   constructor(readonly remote: FakeRemote) {}
 
@@ -75,6 +78,7 @@ export class FakeWorkingCopy implements WorkingCopy {
 
   async commit(changes: Change[], message: string) {
     await tick();
+    if (this.failCommit) throw new Error("disk full");
     if (!this.local) throw new Error("no working copy");
     const files = new Map(this.local.files);
     for (const c of changes) c.content === null ? files.delete(c.path) : files.set(c.path, c.content);
@@ -96,7 +100,10 @@ export class FakeWorkingCopy implements WorkingCopy {
     if (this.remote.commits.get(this.local.id)!.parent !== this.remote.head) return "rejected";
     this.remote.head = this.local.id;
     this.base = this.local.id;
-    if (failure === "error-landed") throw new Error("unreadable response");
+    if (failure === "error-landed") {
+      this.beforeConfirm?.();
+      throw new Error("unreadable response");
+    }
     return "ok";
   }
 
