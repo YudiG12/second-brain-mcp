@@ -15,7 +15,7 @@
   "vectorize": [{ "binding": "VECTORS", "index_name": "second-brain" }],
   // invocation logs would record request URLs, which carry MCP_TOKEN until OAuth (ADR 004, ADR 011)
   // the Artifacts repository that holds the notes; a staging deploy points at a scratch repo
-  "vars": { "PUBLIC_URL": "https://second-brain-mcp.yudiganeko.workers.dev", "OWNER_GITHUB_ID": "42354260", "NOTES_REPO": "notes", "VECTORIZE_INDEX": "second-brain", "CF_ACCOUNT_ID": "337de6b8e4de301a53ecae0c06afcc72" },
+  "vars": { "PUBLIC_URL": "https://second-brain-mcp.yudiganeko.workers.dev", "OWNER_GITHUB_ID": "42354260", "GITHUB_CLIENT_ID": "Ov23liHbglhKscajvd3A", "NOTES_REPO": "notes", "VECTORIZE_INDEX": "second-brain", "CF_ACCOUNT_ID": "337de6b8e4de301a53ecae0c06afcc72" },
   "artifacts": [{ "binding": "ARTIFACTS", "namespace": "second-brain" }],
   "durable_objects": { "bindings": [{ "name": "WRITER", "class_name": "RepoWriter" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RepoWriter"] }],
