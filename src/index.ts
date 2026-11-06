@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
+import { checkPath, chunk, idsFrom, ideaPath, norm, pathHash } from "./lib/notes";
 
 interface Env {
   AI: Ai;
@@ -18,13 +19,9 @@ const E = env as unknown as Env;
 const REPO = "YudiG12/segundo-cerebro";
 const BRANCH = "main";
 const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual, 1024 dimensions
-const CHUNK_CHARS = 1200;
-const MAX_CHUNKS = 50; // max chunks per note, also used to delete leftovers
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 
-// strips accents and case, so "decisão" matches "decisao"
-const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 // ---------- GitHub ----------
 
@@ -84,12 +81,6 @@ async function deleteFile(path: string, message: string) {
   if (!res.ok) throw new Error(`GitHub ${res.status} while deleting: ${await res.text()}`);
 }
 
-// path relative to the repo root, Markdown only, never outside the repo
-function checkPath(path: string) {
-  const p = path.trim().replace(/^\/+/, "");
-  if (!p.endsWith(".md") || p.split("/").some((seg) => seg === ".." || seg === "")) throw new Error(`Invalid path: ${path} (use something like projetos/name.md)`);
-  return p;
-}
 
 // ---------- Index ----------
 
@@ -98,32 +89,8 @@ async function embed(texts: string[]): Promise<number[][]> {
   return res.data;
 }
 
-// splits by paragraph, packing up to ~1200 characters per chunk
-function chunk(body: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  for (const para of body.split(/\n\s*\n/)) {
-    if (cur && cur.length + para.length > CHUNK_CHARS) {
-      out.push(cur.trim());
-      cur = "";
-    }
-    cur += para + "\n\n";
-  }
-  if (cur.trim()) out.push(cur.trim());
-  return out.slice(0, MAX_CHUNKS);
-}
 
-// short, stable id (Vectorize accepts up to 64 bytes): path hash + chunk number
-async function pathHash(path: string) {
-  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(path));
-  return [...new Uint8Array(h)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
-// chunk ids from `from` onward: leftovers from a longer version of the note
-async function idsFrom(path: string, from: number) {
-  const h = await pathHash(path);
-  return Array.from({ length: MAX_CHUNKS - from }, (_, i) => `${h}-${from + i}`);
-}
 
 // indexes a note: upsert by the same id (re-running doesn't duplicate) and deletes leftover chunks
 async function indexNote(path: string, body: string) {
@@ -219,9 +186,7 @@ function createServer() {
     "save_idea",
     { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (a GitHub commit) and indexes it. The local clone pulls it on the next session.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {
-      const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD in Brasília time
-      const slug = norm(title).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-      const path = `ideias/${day}-${slug}.md`;
+      const path = ideaPath(title);
       const body = `# ${title}\n\n${content}\n`;
       await writeFile(path, body, `idea: ${title} (via MCP)`);
       await indexNote(path, body); // the webhook re-indexes too; this makes it searchable right away
