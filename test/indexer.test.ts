@@ -88,6 +88,14 @@ describe("index(path) (spec v2 §5.2)", () => {
   });
 });
 
+describe("drop(pathHash) (rebuild)", () => {
+  it("deletes the vectors of a path hash no note produces", async () => {
+    await index.upsert([{ id: "ghost-0", values: [1], metadata: { path: "ghost.md", seq: 0, text: "" } }, { id: "ghost-49", values: [1], metadata: { path: "ghost.md", seq: 49, text: "" } }]);
+    expect(await handle({ type: "drop", pathHash: "ghost" } as any, deps)).toEqual({ kind: "dropped", pathHash: "ghost" });
+    expect(index.vectors.size).toBe(0);
+  });
+});
+
 describe("pushed events", () => {
   it("ignores message types it doesn't know, instead of failing into the dead-letter queue", async () => {
     expect((await handle({ type: "cf.artifacts.repo.cloned" } as any, deps)).kind).toBe("ignored");
