@@ -51,36 +51,42 @@ export class Writer {
   }
 
   private async apply(op: Operation): Promise<WriteResult> {
-    try {
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // Everything before the push can only fail without writing anything.
+      let changes: Change[];
+      let commit: string;
+      try {
         if (!this.copy.ready()) await this.copy.sync();
-        const changes = await changesFor(op, (p) => this.copy.read(p));
-        const commit = await this.copy.commit(changes, message(op));
-        let outcome;
-        try {
-          outcome = await this.copy.push();
-        } catch (e) {
-          return await this.confirm(commit, e);
-        }
-        if (outcome === "ok") return { status: "ok", commit, paths: changes.map((c) => c.path).sort() };
-        await this.copy.sync(); // rejected: the branch moved; re-run the operation on the new tip
+        changes = await changesFor(op, (p) => this.copy.read(p));
+        commit = await this.copy.commit(changes, message(op));
+      } catch (e) {
+        if (!(e instanceof OperationError)) this.copy.drop(); // the copy may be half-written; nothing was committed if it's an OperationError
+        return { status: "failed", reason: e instanceof Error ? e.message : String(e) };
       }
-      return { status: "busy" };
-    } catch (e) {
-      if (e instanceof OperationError) {
-        if (this.copy.ready()) await this.copy.sync().catch(() => this.copy.drop()); // discard nothing-to-push state
-        return { status: "failed", reason: e.message };
+      const ok = { status: "ok" as const, commit, paths: changes.map((c) => c.path).sort(), changes };
+      let outcome;
+      try {
+        outcome = await this.copy.push();
+      } catch (e) {
+        return this.confirm(ok, e);
       }
-      this.copy.drop();
-      return { status: "unknown", reason: String(e) };
+      if (outcome === "ok") return ok;
+      // rejected: the branch moved. Fetch the new tip and re-run the operation on it.
+      try {
+        await this.copy.sync();
+      } catch (e) {
+        this.copy.drop();
+        return { status: "failed", reason: `the branch moved and fetching it failed: ${String(e)}` };
+      }
     }
+    return { status: "busy" };
   }
 
   /** After a push error: the push may have landed. Check the remote before reporting. */
-  private async confirm(commit: string, error: unknown): Promise<WriteResult> {
+  private async confirm(ok: Extract<WriteResult, { status: "ok" }>, error: unknown): Promise<WriteResult> {
     try {
       await this.copy.sync();
-      if (await this.copy.contains(commit)) return { status: "ok", commit, paths: [] };
+      if (await this.copy.contains(ok.commit)) return ok;
       return { status: "failed", reason: `push failed: ${String(error)}` };
     } catch {
       this.copy.drop();

@@ -12,7 +12,7 @@ export type Operation =
 export type Change = { path: string; content: string | null };
 
 export type WriteResult =
-  | { status: "ok"; commit: string; paths: string[] }
+  | { status: "ok"; commit: string; paths: string[]; changes: Change[] } // changes: exactly what was committed
   | { status: "failed"; reason: string } // nothing was written
   | { status: "busy" } // the branch kept moving; nothing was written
   | { status: "unknown"; reason: string }; // the push may or may not have landed
@@ -27,9 +27,9 @@ export interface WorkingCopy {
   read(path: string): Promise<string | null>;
   /** Commits on top of the local head. Returns the new commit id. */
   commit(changes: Change[], message: string): Promise<string>;
-  /** "rejected" when the remote moved (non-fast-forward). Throws on any other failure. */
+  /** "rejected" when the remote moved (non-fast-forward). Throws on any other failure, including a timeout. */
   push(): Promise<PushOutcome>;
-  /** After sync(): whether `commit` is the remote head or one of its ancestors. */
+  /** After sync(): whether `commit` is the fetched remote head or one of its ancestors. */
   contains(commit: string): Promise<boolean>;
   /** Forgets the local copy; the next write starts with sync(). */
   drop(): void;
