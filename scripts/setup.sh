@@ -38,6 +38,12 @@ if wr d1 info second-brain >/dev/null 2>&1; then echo "ok: exists"; else
 fi
 wr d1 migrations apply second-brain --remote >/dev/null && echo "ok: migrations applied"
 
+echo "== KV namespace OAUTH_KV"
+if wr kv namespace list 2>/dev/null | grep -q '"title": "OAUTH_KV"\|second-brain-mcp-OAUTH_KV'; then echo "ok: exists"; else
+  wr kv namespace create OAUTH_KV
+  echo "ACTION: put the id printed above in wrangler.jsonc (kv_namespaces), then run this script again."; exit 1
+fi
+
 echo "== Queues"
 for q in index-jobs index-jobs-dlq; do
   if wr queues info "$q" >/dev/null 2>&1; then echo "ok: $q exists"; else wr queues create "$q" >/dev/null && echo "ok: $q created"; fi

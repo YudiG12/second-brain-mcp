@@ -244,6 +244,21 @@ const app = {
       return Response.json({ remote: info.remote, token: tok.plaintext.split("?")[0], expiresAt: tok.expiresAt }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    // OAuth grants: list (GET /admin/grants) and revoke one (DELETE /admin/grants/<id>) (ADR 011)
+    if (url.pathname === "/admin/grants" || url.pathname.startsWith("/admin/grants/")) {
+      if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
+      const id = url.pathname.slice("/admin/grants/".length);
+      if (request.method === "GET" && !id) {
+        const { items } = await envArg.OAUTH_PROVIDER.listUserGrants(envArg.OWNER_GITHUB_ID);
+        return Response.json(items.map((g: any) => ({ id: g.id, clientId: g.clientId, scope: g.scope, createdAt: g.createdAt })), { headers: { "Cache-Control": "no-store" } });
+      }
+      if (request.method === "DELETE" && id) {
+        await envArg.OAUTH_PROVIDER.revokeGrant(decodeURIComponent(id), envArg.OWNER_GITHUB_ID);
+        return Response.json({ revoked: decodeURIComponent(id) });
+      }
+      return new Response("Method not allowed", { status: 405 });
+    }
+
     // starts a reconciliation (default) or a full rebuild (?mode=rebuild); returns the instance id
     if (url.pathname === "/admin/reconcile" && request.method === "POST") {
       if (!(await hasBearer(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
@@ -312,4 +327,9 @@ const oauth = new OAuthProvider<Env>({
 export default {
   fetch: (request: Request, envArg: Env, ctx: ExecutionContext) => oauth.fetch(request, envArg, ctx),
   queue: app.queue,
+  // daily: remove expired grants and tokens, and clients that registered again and left orphans
+  async scheduled(_event: ScheduledController, envArg: Env) {
+    const result = await oauth.purgeExpiredData(envArg);
+    console.log(JSON.stringify({ oauthPurge: result }));
+  },
 } satisfies ExportedHandler<Env, QueueMessage>;

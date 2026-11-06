@@ -51,6 +51,31 @@ describe("OAuth discovery (ADR 011)", () => {
   });
 });
 
+describe("grants admin routes", () => {
+  it("hides /admin/grants without the admin secret", async () => {
+    expect((await fetchWorker("/admin/grants")).status).toBe(404);
+  });
+
+  it("lists the owner's grants after a sign-in, and revokes one", async () => {
+    const { approve } = await startSignIn("https://claude.ai/api/mcp/auth_callback");
+    const state = new URL(approve.headers.get("Location")!).searchParams.get("state")!;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith("https://github.com/login/oauth/access_token")) return Response.json({ access_token: "gh-token" });
+      return Response.json({ id: 42, login: "owner" });
+    });
+    await fetchWorker(`/callback?code=c&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookies(approve) } });
+    vi.restoreAllMocks();
+    const auth = { Authorization: "Bearer test-admin" };
+    const grants = (await (await fetchWorker("/admin/grants", { headers: auth })).json()) as { id: string }[];
+    expect(grants.length).toBeGreaterThan(0);
+    const del = await fetchWorker(`/admin/grants/${encodeURIComponent(grants[0].id)}`, { method: "DELETE", headers: auth });
+    expect(del.status).toBe(200);
+    const after = (await (await fetchWorker("/admin/grants", { headers: auth })).json()) as { id: string }[];
+    expect(after.find((g) => g.id === grants[0].id)).toBeUndefined();
+  });
+});
+
 describe("consent and sign-in", () => {
   it("refuses to send access anywhere but Claude, ChatGPT or this computer", async () => {
     const clientId = await register("https://evil.example/cb");

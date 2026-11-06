@@ -33,5 +33,7 @@
   "workflows": [{ "name": "reconcile", "binding": "RECONCILE", "class_name": "Reconcile", "schedules": ["0 4 * * *"] }],
   // OAuth clients, grants and tokens (ADR 011); tokens and secrets stored as hashes by the library
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "465c1e0d7b48470ba697d591c693eb72" }],
+  // daily OAuth cleanup (purgeExpiredData), after the 04:00 reconciliation
+  "triggers": { "crons": ["30 4 * * *"] },
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }
