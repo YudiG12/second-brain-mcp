@@ -8,11 +8,13 @@ describe("norm", () => {
 describe("checkPath", () => {
   it.each([
     ["projetos/cafezinho.md", "projetos/cafezinho.md"],
-    ["/projetos/x.md", "projetos/x.md"],
     ["  a.md  ", "a.md"],
+    ["ideias/café.md", "ideias/café.md"],
   ])("accepts %j", (input, expected) => expect(checkPath(input)).toBe(expected));
 
-  it.each(["../x.md", "a/../b.md", "a//b.md", "notes.txt", "a/", ""])("rejects %j", (input) => {
+  // spec v2 §3: relative, .md, at most 512 bytes, no "..", no empty or "." segments, no leading "/",
+  // no backslash or control characters
+  it.each(["../x.md", "a/../b.md", "a//b.md", "notes.txt", "a/", "", "/projetos/x.md", "./a.md", "a/./b.md", "a\\b.md", "a\u0000.md", "x".repeat(510) + ".md"])("rejects %j", (input) => {
     expect(() => checkPath(input)).toThrow(/Invalid path/);
   });
 });
@@ -71,6 +73,11 @@ describe("ideaPath", () => {
 
   it("uses the date in Brasília time and a slug of the title", async () => {
     expect(await ideaPath("Ideia: Café & Código!", now)).toBe("ideias/2026-11-06-ideia-cafe-codigo.md");
+  });
+
+  it("never ends the slug with a dash after capping it", async () => {
+    const path = await ideaPath("x".repeat(59) + " y", now);
+    expect(path).toBe(`ideias/2026-11-06-${"x".repeat(59)}.md`);
   });
 
   it("caps the slug at 60 characters", async () => {

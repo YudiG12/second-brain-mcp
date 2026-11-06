@@ -84,7 +84,7 @@ async function describe(r: WriteResult, op: Operation, done: string): Promise<st
     case "unknown":
       // enqueue anyway: indexing reads the head, so this is harmless if nothing landed
       await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
-      return `Not sure the change was saved (${r.reason}). Check with read_note before retrying.`;
+      return `Not sure the change to ${opPaths(op).join(" and ")} was saved (${r.reason}). Check it with read_note before retrying.`;
   }
   const saved = `${done} (${r.commit.slice(0, 7)}). Searchable in a few seconds to a couple of minutes.`;
   try {

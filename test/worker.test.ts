@@ -37,7 +37,8 @@ async function callTool(name: string, args: Record<string, unknown>) {
 }
 
 describe("read_note path rules (#30)", () => {
-  it.each(["../x.md", "a/../../b.md", "notes.txt", "a//b.md"])("refuses %j before touching storage", async (path) => {
+  // There is no ARTIFACTS binding in tests: reaching storage would fail with a TypeError, not "Invalid path".
+  it.each(["../x.md", "a/../../b.md", "notes.txt", "a//b.md", "/x.md"])("refuses %j before touching storage", async (path) => {
     expect(await callTool("read_note", { path })).toMatch(/Invalid path/);
   });
 });
