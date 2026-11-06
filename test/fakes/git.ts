@@ -86,8 +86,9 @@ export class FakeWorkingCopy implements WorkingCopy {
   async push(): Promise<PushOutcome> {
     await tick();
     this.pushes++;
-    this.beforePush?.();
+    const hook = this.beforePush; // cleared before running, so a hook can re-arm itself
     this.beforePush = null;
+    hook?.();
     if (!this.local) throw new Error("no working copy");
     const failure = this.failNextPush;
     this.failNextPush = null;
