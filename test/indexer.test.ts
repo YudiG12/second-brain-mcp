@@ -97,6 +97,16 @@ describe("drop(pathHash) (rebuild)", () => {
 });
 
 describe("drop(pathHash), re-checked at head", () => {
+  it("finds the note through chunk 0's metadata, without walking every note", async () => {
+    const { pathHash } = await import("../src/lib/notes");
+    await handle({ type: "index", path: "a.md", reason: "write" }, deps);
+    const walks = { n: 0 };
+    const changedPaths = notes.changedPaths.bind(notes);
+    notes.changedPaths = async (a, b) => (walks.n++, changedPaths(a, b));
+    expect(await handle({ type: "drop", pathHash: await pathHash("a.md") }, deps)).toEqual({ kind: "requeued", path: "a.md" });
+    expect(walks.n).toBe(0);
+  });
+
   it("re-indexes instead of dropping when a note at the head now produces that hash", async () => {
     const { pathHash } = await import("../src/lib/notes");
     notes.commit({ "new.md": "created after the rebuild's snapshot" });

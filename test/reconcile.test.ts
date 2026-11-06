@@ -4,6 +4,7 @@ import type { NoteSha, ReconcileDeps, Step } from "../src/reconcile/types";
 
 let source: NoteSha[], manifest: NoteSha[], vectorHashes: string[] | null, sent: any[], alerts: string[], stepNames: string[], changedAfter: string[];
 let deps: ReconcileDeps;
+let resolved = 0;
 const step: Step = { do: async (name, fn) => (stepNames.push(name), fn()) };
 
 beforeEach(() => {
@@ -32,7 +33,9 @@ beforeEach(() => {
     enqueue: async (ms) => void sent.push(...ms),
     pathHash: async (p) => `h(${p})`,
     alert: async (b) => void alerts.push(b),
+    resolveDlqAlerts: async () => void (resolved += 1),
   };
+  resolved = 0;
 });
 
 describe("daily reconciliation (#7)", () => {
@@ -68,6 +71,32 @@ describe("daily reconciliation (#7)", () => {
     const r = await runReconcile("daily", step, deps);
     expect(r.alerted).toBe(false);
     expect(alerts).toEqual([]);
+  });
+
+  it("marks open dead-letter alerts resolved when it finishes (spec §5.2)", async () => {
+    await runReconcile("daily", step, deps);
+    expect(resolved).toBe(1);
+  });
+
+  it("resumes from the failed step on replay: same slices, finished batches not re-sent", async () => {
+    source = Array.from({ length: 45 }, (_, i) => ({ path: `n${i}.md`, sha: "x" }));
+    manifest = [];
+    const cache = new Map<string, unknown>();
+    let failOn: string | null = "enqueue 2/3";
+    const replaying: Step = {
+      do: async (name, fn) => {
+        if (cache.has(name)) return cache.get(name) as any;
+        if (name === failOn) throw new Error("boom");
+        const v = await fn();
+        cache.set(name, v);
+        return v;
+      },
+    };
+    await expect(runReconcile("daily", replaying, deps)).rejects.toThrow("boom");
+    expect(sent.map((m) => m.path)).toEqual(source.slice(0, 20).map((n) => n.path));
+    failOn = null;
+    await runReconcile("daily", replaying, deps);
+    expect(sent.map((m) => m.path)).toEqual(source.map((n) => n.path)); // each note exactly once
   });
 
   it("does nothing on an empty repository", async () => {

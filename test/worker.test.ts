@@ -13,9 +13,9 @@ describe("routing", () => {
     expect(res.status).not.toBe(404);
   });
 
-  it("no longer serves /reindex (replaced by /admin/reconcile?mode=rebuild)", async () => {
-    const res = await exports.default.fetch("https://example.com/test-token/reindex", { method: "POST" });
-    expect(res.status).not.toBe(202);
+  it.each(["/test-token/reindex", "/test-token/anything"])("serves only /mcp under the token prefix (%s is 404)", async (path) => {
+    const res = await exports.default.fetch(`https://example.com${path}`, { method: "POST" });
+    expect(res.status).toBe(404);
   });
 
   it("no longer serves the GitHub webhook (ADR 007; closes #42 by removal)", async () => {
@@ -49,6 +49,14 @@ describe("read_note path rules (#30)", () => {
 });
 
 describe("admin routes", () => {
+  it("starts a rebuild with the admin secret and returns its instance id", async () => {
+    const res = await exports.default.fetch("https://example.com/admin/reconcile?mode=rebuild", { method: "POST", headers: { Authorization: "Bearer test-admin" } });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { id: string; mode: string };
+    expect(body.mode).toBe("rebuild");
+    expect(body.id).toMatch(/^manual-rebuild-[0-9a-f-]{36}$/);
+  });
+
   it.each([
     ["/admin/artifacts-token", undefined],
     ["/admin/artifacts-token", "Bearer wrong"],

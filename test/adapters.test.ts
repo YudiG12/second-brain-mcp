@@ -92,8 +92,14 @@ describe("vectorPathHashes (REST list-vectors)", () => {
     ];
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(pages.shift()));
     expect(await vectorPathHashes("acct", "idx", "tok")).toEqual(["aaa", "bbb"]);
+    // (ids without a "-<seq>" suffix are not ours and are skipped: see the next test)
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(String(fetch.mock.calls[1][0])).toContain("cursor=next");
+  });
+
+  it("skips ids that aren't <hash>-<seq>", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ success: true, result: { vectors: [{ id: "nodash" }, { id: "ccc-3" }], isTruncated: false } }));
+    expect(await vectorPathHashes("acct", "idx", "tok")).toEqual(["ccc"]);
   });
 
   it("throws on an API error instead of treating it as an empty index", async () => {
