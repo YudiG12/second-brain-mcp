@@ -113,6 +113,26 @@ printf 'cleaned up by hand\n' > "$T/mac/ideias/a.md"
 bash "$HOOK" push 2>/dev/null
 check "the edit to the conflicted note is kept" 'git -C "$T/remote.git" grep -q "cleaned up by hand" main'
 
+echo "a hand edit to a note that quotes conflict markers"
+setup
+(cd "$T/other" && printf 'how git marks a conflict:\n<<<<<<< HEAD\nend: base\n' > ideias/git.md && git add -A && git commit -qm g && git push -q)
+bash "$HOOK" pull 2>/dev/null
+(cd "$T/other" && printf 'how git marks a conflict:\n<<<<<<< HEAD\nend: phone\n' > ideias/git.md && git commit -qam p && git push -q)
+printf 'how git marks a conflict:\n<<<<<<< HEAD\nend: mac\n' > "$T/mac/ideias/git.md"
+(cd "$T/mac" && git add -A && git commit -qm mac && git fetch -q && git merge -q --no-edit origin/main >/dev/null 2>&1)
+printf 'how git marks a conflict:\n<<<<<<< HEAD\nend: HAND-RESOLVED\n' > "$T/mac/ideias/git.md"
+bash "$HOOK" push 2>/dev/null
+check "the hand edit is kept" 'git -C "$T/remote.git" grep -q "HAND-RESOLVED" main'
+
+echo "both spellings of a name come from the remote (macOS: one file on disk)"
+setup
+(cd "$T/other" && printf 'mac-old\n' > ideias/nota.md && git add -A && git commit -qm n && git push -q)
+bash "$HOOK" pull 2>/dev/null
+(cd "$T/other" && printf 'phone\n' > ideias/Nota.md && git add -A && git commit -qm N && git push -q)
+bash "$HOOK" pull 2>/dev/null
+printf 'y\n' > "$T/mac/ideias/y.md"; bash "$HOOK" push 2>/dev/null
+check "a later sync doesn't overwrite one spelling with the other" '[ "$(remote_file ideias/nota.md)" = "mac-old" ] && [ "$(remote_file ideias/Nota.md)" = "phone" ]'
+
 echo "a local commit that can't be made"
 setup
 printf 'x\n' > "$T/mac/ideias/x.md"; touch "$T/mac/.git/index.lock"
