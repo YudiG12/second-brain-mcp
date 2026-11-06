@@ -4,9 +4,10 @@
 #   pull-throttle  on prompts, at most every 10 minutes
 #   push           after each answer, only when there is something to send
 #
-# Rule: no local edit is ever lost. Before anything destructive, the local version is pinned in
-# refs/notes-sync/pending; every run first finishes a restore left pending by an interrupted run.
-# Conflicts keep the remote version at the path and the local one as <name>.conflict-<time>.<ext>.
+# Rule: no local edit is ever lost. Local edits are committed first and local commits are never
+# rewritten: the remote comes in by fast-forward or merge. A conflicted note keeps the remote
+# version at its path and the local one as <name>.conflict-<time>.<ext>; an interrupted merge is
+# resumed by the next run.
 # Failures are logged to ~/.claude/notes-sync.log and exit 1, so Claude Code shows them; nothing
 # goes to stdout (on some hooks it would be added to Claude's context).
 #
@@ -19,7 +20,6 @@ LOG="$HOME/.claude/notes-sync.log"
 PULL_EVERY=600
 LOCK_WAIT="${NOTES_SYNC_LOCK_WAIT:-10}" # seconds to wait for another session's sync
 LOCK_STALE=120                           # a lock this old with no pid is abandoned
-PENDING=refs/notes-sync/pending
 cd "$DIR" 2>/dev/null || exit 0
 [ -d .git ] || exit 0
 export GIT_TERMINAL_PROMPT=0
@@ -72,41 +72,11 @@ auth() {
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $token"
 }
 
-# Commits whatever is in the working tree, so nothing local lives outside a commit during a pull.
+# Commits whatever is in the working tree, so nothing local lives outside a commit during a merge.
 commit_local() {
   [ -n "$(git status --porcelain)" ] || return 0
   local n; n=$(git status --porcelain | wc -l | tr -d ' ')
   git add -A >>"$LOG" 2>&1 && git commit -qm "notes: $n file(s) via Claude Code, $(date '+%F %H:%M')" >>"$LOG" 2>&1
-}
-
-# Pins the local state in $PENDING before anything destructive: the local commit, plus any file
-# edited in the working tree since the current HEAD (written during a stopped rebase, or by
-# another writer). Files with conflict markers are never taken from the working tree.
-pin_local() {
-  local mine="$1" tmp unmerged edited
-  tmp=$(mktemp); unmerged=$(mktemp); edited=$(mktemp)
-  # computed against the real index, before switching to the temporary one
-  git diff -z --name-only --diff-filter=U > "$unmerged" 2>/dev/null
-  { git diff -z --name-only HEAD 2>/dev/null; git ls-files -z --others --exclude-standard; } > "$edited"
-  (
-    export GIT_INDEX_FILE="$tmp"
-    git read-tree "$mine" || exit 1
-    while IFS= read -r -d '' f; do
-      skip=0
-      while IFS= read -r -d '' u; do [ "$u" = "$f" ] && { skip=1; break; }; done < "$unmerged"
-      [ "$skip" = 1 ] && continue
-        if [ -f "$f" ]; then
-          git update-index --add --cacheinfo "100644,$(git hash-object -w -- "$f"),$f" || exit 1
-        else
-          git update-index --force-remove -- "$f" || exit 1
-        fi
-    done < "$edited"
-    tree=$(git write-tree) || exit 1
-    commit=$(git commit-tree "$tree" -p "$mine" -m "notes-sync: pinned local state") || exit 1
-    git update-ref "$PENDING" "$commit"
-  ); local rc=$?
-  rm -f "$tmp" "$unmerged" "$edited"
-  return $rc
 }
 
 conflict_name() { # a/b.md -> a/b.conflict-<ts>.md ; a/img.png -> a/img.conflict-<ts>.png
@@ -115,66 +85,58 @@ conflict_name() { # a/b.md -> a/b.conflict-<ts>.md ; a/img.png -> a/img.conflict
   case "$name" in ?*.*) echo "$dir${name%.*}.conflict-$ts.${name##*.}";; *) echo "$dir$name.conflict-$ts";; esac
 }
 
-# Puts every local change pinned in $PENDING back on top of the remote: changed only here keeps
-# its path; changed on both sides keeps the remote version and adds a conflict copy; deleted here
-# and untouched remotely stays deleted. Clears $PENDING only once all of it is committed.
-restore_pending() {
-  local mine base ts n=0 remote_changed
-  mine=$(git rev-parse -q --verify "$PENDING") || return 0
-  [ -n "$UPSTREAM" ] || { fail "no upstream for $BRANCH; your local version is safe in $PENDING"; return 1; }
-  base=$(git merge-base "$mine" "$UPSTREAM") || { fail "can't find a common base; your local version is safe in $PENDING"; return 1; }
+# Resolves an in-progress merge (#15): for each conflicted note, the remote version stays at its
+# path and the local version (from the local commit, index stage 2) is saved next to it as a
+# conflict copy. Nothing else is touched: local commits are never rewritten or reset, so nothing
+# local can be lost, and an interrupted run just resumes here.
+resolve_merge() {
+  local ts n=0 list
   ts=$(date '+%Y%m%d-%H%M%S')
-  remote_changed=$(mktemp)
-  git diff -z --name-only "$base" "$UPSTREAM" > "$remote_changed"
-  git reset -q --hard "$UPSTREAM" >>"$LOG" 2>&1 || { rm -f "$remote_changed"; fail "reset failed; your local version is safe in $PENDING"; return 1; }
-  [ -n "${NOTES_SYNC_TEST_DIE_AFTER_RESET:-}" ] && kill -9 $$
-  local failed=0
+  list=$(mktemp)
+  git ls-files -u -z | tr '\0' '\n' | cut -f2 | sort -u | tr '\n' '\0' > "$list"
   while IFS= read -r -d '' f; do
-    local both=0 r
-    while IFS= read -r -d '' r; do [ "$r" = "$f" ] && { both=1; break; }; done < "$remote_changed"
-    if git cat-file -e "$mine:$f" 2>/dev/null; then
-      local dest="$f"; [ "$both" = 1 ] && dest=$(conflict_name "$f" "$ts")
-      if mkdir -p -- "$(dirname -- "$dest")" 2>>"$LOG" && git show "$mine:$f" > "./$dest" 2>>"$LOG"; then
-        [ "$both" = 1 ] && n=$((n + 1))
-      else
-        failed=1; fail "could not restore $f (a file and a folder clash?)"
-      fi
-    elif [ "$both" = 0 ]; then
-      rm -f -- "./$f" # deleted here and untouched on the remote
-    fi # deleted here but changed on the remote: the remote version wins
-  done < <(git diff -z --name-only "$base" "$mine")
-  rm -f "$remote_changed"
-  if [ "$failed" = 1 ]; then fail "some local changes could not be restored; they are safe in $PENDING (git show $PENDING:<path>)"; return 1; fi
-  commit_local || { fail "commit after restore failed; your local version is safe in $PENDING"; return 1; }
-  git update-ref -d "$PENDING"
-  git push -q >>"$LOG" 2>&1 || fail "push after the restore failed; the next sync retries"
-  [ "$n" -gt 0 ] && { fail "the remote changed the same notes; kept the remote version and saved $n local version(s) as *.conflict-$ts.*"; return 1; }
+    if git cat-file -e ":2:$f" 2>/dev/null; then
+      local copy; copy=$(conflict_name "$f" "$ts")
+      mkdir -p -- "$(dirname -- "$copy")" && rm -f -- "./$copy" && git show ":2:$f" > "./$copy" && git add -- "./$copy" || { rm -f "$list"; fail "could not save the local version of $f; the merge is left as is for the next run"; return 1; }
+      n=$((n + 1))
+    fi
+    if git cat-file -e ":3:$f" 2>/dev/null; then
+      git checkout --theirs -- "./$f" >>"$LOG" 2>&1 && git add -- "./$f" >>"$LOG" 2>&1
+    else
+      git rm -q -- "./$f" >>"$LOG" 2>&1 # deleted on the remote; the local version is in the copy
+    fi || { rm -f "$list"; fail "could not resolve $f; the merge is left as is for the next run"; return 1; }
+    [ -n "${NOTES_SYNC_TEST_DIE_MID_RESOLVE:-}" ] && kill -9 $$
+  done < "$list"
+  rm -f "$list"
+  [ -n "$(git ls-files -u)" ] && { fail "conflicts remain in $DIR; the merge is left as is for the next run"; return 1; }
+  [ -n "${NOTES_SYNC_TEST_DURING_RESOLVE:-}" ] && eval "$NOTES_SYNC_TEST_DURING_RESOLVE"
+  git add -A >>"$LOG" 2>&1 # anything written meanwhile goes into the merge commit, not lost
+  git commit -q --no-edit >>"$LOG" 2>&1 || { fail "could not commit the merge in $DIR"; return 1; }
+  [ "$n" -gt 0 ] && CONFLICTS="$n local version(s) saved as *.conflict-$ts.*"
   return 0
 }
 
-# Finishes what an interrupted run left behind: a stopped rebase, or a pending restore.
+# Brings in the remote: fast-forward when possible, otherwise a merge (never a rebase or reset).
+sync_remote() {
+  git fetch -q >>"$LOG" 2>&1 || { fail "fetch failed in $DIR (see $LOG)"; return 1; }
+  git merge-base --is-ancestor "$UPSTREAM" HEAD && return 0 # nothing new on the remote
+  if git merge-base --is-ancestor HEAD "$UPSTREAM"; then
+    git merge -q --ff-only "$UPSTREAM" >>"$LOG" 2>&1 || { fail "fast-forward failed in $DIR (see $LOG)"; return 1; }
+    return 0
+  fi
+  git merge -q --no-edit "$UPSTREAM" >>"$LOG" 2>&1 && return 0
+  [ -f .git/MERGE_HEAD ] || { fail "merge failed in $DIR (see $LOG)"; return 1; }
+  resolve_merge
+}
+
+# Finishes what an interrupted run left: a merge in progress.
 recover() {
   if mid_rebase; then
-    local replaying; replaying=$(cat .git/rebase-merge/orig-head .git/rebase-apply/orig-head 2>/dev/null | head -1)
-    [ -n "$replaying" ] || { fail "$DIR is in the middle of a rebase with no record of the local commit; fix it by hand"; return 1; }
-    pin_local "$replaying" || { fail "could not pin the local state; nothing was changed"; return 1; }
-    git rebase --abort >>"$LOG" 2>&1
-    fail "found $DIR in the middle of a rebase (an earlier sync was interrupted); recovering"
+    fail "$DIR is in the middle of a rebase (left by an older version of this hook); nothing was changed. Run 'git rebase --abort' there, then sync again."
+    return 1
   fi
-  if git rev-parse -q --verify "$PENDING" >/dev/null; then restore_pending || return 1; fi
+  [ -f .git/MERGE_HEAD ] && { resolve_merge || return 1; }
   return 0
-}
-
-# Pull with rebase; on a conflict, pin, abort, and restore (see restore_pending).
-sync_remote() {
-  git pull --rebase -q >>"$LOG" 2>&1 && return 0
-  mid_rebase || { fail "pull failed in $DIR (see $LOG)"; return 1; }
-  local mine; mine=$(cat .git/rebase-merge/orig-head .git/rebase-apply/orig-head 2>/dev/null | head -1)
-  [ -n "${NOTES_SYNC_TEST_BEFORE_ABORT:-}" ] && eval "$NOTES_SYNC_TEST_BEFORE_ABORT"
-  pin_local "$mine" || { fail "could not pin the local state; leaving the rebase for the next run"; return 1; }
-  git rebase --abort >>"$LOG" 2>&1
-  git fetch -q >>"$LOG" 2>&1
-  restore_pending
 }
 
 start() {
@@ -183,13 +145,17 @@ start() {
   auth || return 1
   recover || return 1
 }
+CONFLICTS=""
 
 pull() {
-  if [ "$1" = "throttle" ] && [ -f "$STAMP" ] && [ "$(age "$STAMP")" -lt "$PULL_EVERY" ]; then return 0; fi
+  if [ "$1" = "throttle" ] && [ -f "$STAMP" ] && [ "$(age "$STAMP")" -lt "$PULL_EVERY" ] && [ ! -f .git/MERGE_HEAD ]; then return 0; fi
   start || return 1
   commit_local
   sync_remote || return 1
   touch "$STAMP"
+  # local commits made by the merge or before it go out now, so the remote has the copies
+  [ -n "$(git log "$UPSTREAM..HEAD" --oneline 2>/dev/null)" ] && { git push -q >>"$LOG" 2>&1 || fail "push failed in $DIR (see $LOG)"; }
+  report
 }
 
 push() {
@@ -198,9 +164,13 @@ push() {
   # nothing committed locally that the remote lacks: no network call at all
   [ -n "$(git log "$UPSTREAM..HEAD" --oneline 2>/dev/null)" ] || return 0
   sync_remote || return 1
-  git push -q >>"$LOG" 2>&1 || { fail "push failed in $DIR (see $LOG)"; return 1; }
+  git push -q >>"$LOG" 2>&1 || { fail "push failed in $DIR (see $LOG); the next sync retries"; return 1; }
   touch "$STAMP"
+  report
 }
+
+# exit 1 after a conflict, so Claude Code shows it
+report() { [ -z "$CONFLICTS" ] || fail "the remote changed the same notes; kept the remote version, $CONFLICTS"; }
 
 case "$1" in
   pull) pull ;;

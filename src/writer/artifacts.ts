@@ -102,9 +102,20 @@ export class ArtifactsWorkingCopy implements WorkingCopy {
 
   async contains(commit: string) {
     if (this.head === commit) return true;
-    // the fetched tip may be a later commit from the Mac: walk back from it (the notes history is linear: the Mac rebases)
+    // Walks every parent from the fetched tip (not just the first-parent line: the Mac's sync
+    // merges, so a commit can sit on a second parent). Bounded: a lost push is checked right away.
     using repo = await this.artifacts.get(this.repoName);
-    const log = await repo.log({ ref: this.head ?? BRANCH, limit: 100 });
-    return log.some((c) => c.hash === commit);
+    const seen = new Set<string>();
+    const queue = [this.head ?? (await repo.log({ ref: BRANCH, limit: 1 }))[0]?.hash].filter(Boolean) as string[];
+    while (queue.length && seen.size < 200) {
+      const hash = queue.shift()!;
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      if (hash === commit) return true;
+      const c = await repo.readCommit(hash);
+      if (c) queue.push(...c.parents);
+    }
+    return false;
   }
+
 }

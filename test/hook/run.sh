@@ -92,27 +92,41 @@ printf 'mac\n' > "$T/mac/ideias/a.md"
 out=$(bash "$HOOK" push 2>/dev/null)
 check "nothing on stdout" '[ -z "$out" ]'
 
-echo "interrupted: killed right after the reset (Mac asleep, hook timeout)"
+echo "interrupted in the middle of resolving a merge (Mac asleep, hook timeout)"
 setup
-(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
-printf 'mac\n' > "$T/mac/ideias/a.md"; printf 'only here\n' > "$T/mac/ideias/only-local.md"
-NOTES_SYNC_TEST_DIE_AFTER_RESET=1 bash "$HOOK" push 2>/dev/null
-check "the local version is kept in refs/notes-sync/pending" 'git -C "$T/mac" rev-parse -q --verify refs/notes-sync/pending >/dev/null'
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && printf 'phone\n' > ideias/b.md && git add -A && git commit -qm phone && git push -q)
+printf 'mac a\n' > "$T/mac/ideias/a.md"; printf 'mac b\n' > "$T/mac/ideias/b.md"; printf 'only here\n' > "$T/mac/ideias/only-local.md"
+NOTES_SYNC_TEST_DIE_MID_RESOLVE=1 bash "$HOOK" push 2>/dev/null
+printf 'edited after the kill\n' > "$T/mac/ideias/later.md"; printf 'edited too\n' > "$T/mac/ideias/only-local.md"
 bash "$HOOK" push 2>/dev/null
-check "the next run finishes the restore: only-local note reaches the remote" '[ "$(remote_file ideias/only-local.md)" = "only here" ]'
-check "and the conflict copy" 'git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "a.conflict"'
-check "the pending ref is cleared" '! git -C "$T/mac" rev-parse -q --verify refs/notes-sync/pending >/dev/null'
+check "the next run finishes the merge" '[ ! -f "$T/mac/.git/MERGE_HEAD" ] && [ -z "$(git -C "$T/mac" ls-files -u)" ]'
+check "both conflict copies reach the remote" '[ "$(git -C "$T/remote.git" ls-tree -r --name-only main | grep -c conflict)" = 2 ]'
+check "edits made after the kill survive" '[ "$(remote_file ideias/later.md)" = "edited after the kill" ] && [ "$(remote_file ideias/only-local.md)" = "edited too" ]'
+check "no conflict markers reach the remote" '! git -C "$T/remote.git" grep -q "<<<<<<<" main'
 
-echo "interrupted: left in the middle of a rebase, then more edits"
+echo "a clone left mid-rebase by an older hook"
 setup
 (cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
 (cd "$T/mac" && printf 'mac\n' > ideias/a.md && git commit -qam mac && git pull --rebase -q >/dev/null 2>&1)
-printf 'written after\n' > "$T/mac/ideias/after.md"
+bash "$HOOK" push 2>"$T/err"; code=$?
+check "fails loudly and changes nothing" '[ $code = 1 ] && grep -q "rebase" "$T/err" && [ -d "$T/mac/.git/rebase-merge" ]'
+
+echo "several local commits: the newest local version wins"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+(cd "$T/mac" && printf 'mac\n' > ideias/a.md && printf 'v1\n' > ideias/x.md && git add -A && git commit -qm m1 && printf 'v2\n' > ideias/x.md && git commit -qam m2 && printf 'gone\n' > ideias/g.md && git add -A && git commit -qm m3 && git rm -q ideias/g.md && git commit -qm m4)
 bash "$HOOK" push 2>/dev/null
-check "recovers the clone from the stopped rebase" '[ ! -d "$T/mac/.git/rebase-merge" ] && [ ! -d "$T/mac/.git/rebase-apply" ]'
-check "the note written afterwards reaches the remote" '[ "$(remote_file ideias/after.md)" = "written after" ]'
-check "the stopped commit's version is kept as a copy" 'git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "a.conflict"'
-check "no conflict markers reach the remote" '! git -C "$T/remote.git" grep -q "<<<<<<<" main'
+check "x.md has the newest local version" '[ "$(remote_file ideias/x.md)" = "v2" ]'
+check "a note deleted locally stays deleted" '! git -C "$T/remote.git" cat-file -e main:ideias/g.md 2>/dev/null'
+
+echo "many conflicts finish well within the hook timeout"
+setup
+(cd "$T/other" && for i in $(seq 1 150); do printf 'base\n' > "ideias/n$i.md"; done && git add -A && git commit -qm many && git push -q)
+bash "$HOOK" pull 2>/dev/null
+(cd "$T/other" && for i in $(seq 1 150); do printf 'phone\n' > "ideias/n$i.md"; done && git commit -qam phone && git push -q)
+for i in $(seq 1 150); do printf 'mac\n' > "$T/mac/ideias/n$i.md"; done
+start=$(date +%s); bash "$HOOK" push 2>/dev/null; took=$(( $(date +%s) - start ))
+check "150 conflicts resolved in under 10 s (took ${took}s)" '[ "$took" -lt 10 ] && [ "$(git -C "$T/remote.git" ls-tree -r --name-only main | grep -c conflict)" = 150 ]'
 
 echo "an edit made while the conflict is being resolved"
 setup
@@ -120,8 +134,8 @@ setup
 bash "$HOOK" pull 2>/dev/null
 (cd "$T/other" && printf 'phone 2\n' > ideias/a.md && git commit -qam phone2 && git push -q)
 printf 'mac\n' > "$T/mac/ideias/a.md"
-NOTES_SYNC_TEST_BEFORE_ABORT='printf "edited meanwhile\n" > ideias/b.md' bash "$HOOK" push 2>/dev/null
-check "the edit is not wiped by the reset" '[ "$(remote_file ideias/b.md)" = "edited meanwhile" ] || [ "$(cat "$T/mac/ideias/b.md")" = "edited meanwhile" ]'
+NOTES_SYNC_TEST_DURING_RESOLVE='printf "edited meanwhile\n" > ideias/b.md' bash "$HOOK" push 2>/dev/null
+check "the edit is not wiped" '[ "$(remote_file ideias/b.md)" = "edited meanwhile" ] || [ "$(cat "$T/mac/ideias/b.md")" = "edited meanwhile" ]'
 
 echo "odd names and clashes"
 setup
@@ -135,7 +149,7 @@ setup
 (cd "$T/other" && printf 'phone\n' > ideias/a.md && printf 'a file\n' > proj && git add -A && git commit -qm p && git push -q)
 printf 'mac\n' > "$T/mac/ideias/a.md"; mkdir -p "$T/mac/proj"; printf 'n\n' > "$T/mac/proj/n.md"
 bash "$HOOK" push 2>"$T/err"; code=$?
-check "a file/folder clash fails loudly and keeps the local version" '[ $code = 1 ] && git -C "$T/mac" rev-parse -q --verify refs/notes-sync/pending >/dev/null && git -C "$T/mac" show refs/notes-sync/pending:proj/n.md | grep -q n'
+check "a file/folder clash loses nothing: both versions reach the remote" '[ "$(remote_file proj/n.md)" = "n" ] && git -C "$T/remote.git" ls-tree -r --name-only main | grep -q "^proj~"'
 setup
 (cd "$T/other" && printf 'phone\n' > ideias/img.png && git add -A && git commit -qm p && git push -q)
 printf 'mac\n' > "$T/mac/ideias/img.png"

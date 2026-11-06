@@ -10,7 +10,7 @@ Claude Code on the Mac reads and writes the notes as local files, in a clone of 
 
 Git authenticates with a 1-hour write token from the Worker (`POST /hook/artifacts-token`), cached in the macOS Keychain. That route takes the hook secret, which can do nothing else.
 
-Only one sync runs at a time per clone (a lock in `.git/notes-sync.lock`; a second session waits up to 10 s, then skips visibly). If a rebase conflicts, the remote version wins and each local version is saved and pushed as `<name>.conflict-<time>.md` next to the original. Failures are logged to `~/.claude/notes-sync.log` and exit 1, so Claude Code shows them. Tests: `bash test/hook/run.sh`.
+Only one sync runs at a time per clone (a lock in `.git/notes-sync.lock`; a second session waits up to 10 s, then skips visibly). Local commits are never rewritten: the remote comes in by fast-forward or merge. If both sides changed the same note, the remote version stays at its path and the local one is saved and pushed as `<name>.conflict-<time>.md` next to it; an interrupted sync is finished by the next run. Failures are logged to `~/.claude/notes-sync.log` and exit 1, so Claude Code shows them. Tests: `bash test/hook/run.sh`.
 
 Every push, from the Mac or from the MCP, emits an Artifacts `pushed` event into the `index-jobs` queue, which re-indexes the changed notes ([ADR 009](../../docs/adr/009-queue-for-indexing-workflow-for-reconciliation.md)).
 
