@@ -104,6 +104,45 @@ check "both conflict copies reach the remote" '[ "$(git -C "$T/remote.git" ls-tr
 check "edits made after the kill survive" '[ "$(remote_file ideias/later.md)" = "edited after the kill" ] && [ "$(remote_file ideias/only-local.md)" = "edited too" ]'
 check "no conflict markers reach the remote" '! git -C "$T/remote.git" grep -q "<<<<<<<" main'
 
+echo "a conflicted note edited after an interrupted merge"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+printf 'mac\n' > "$T/mac/ideias/a.md"
+(cd "$T/mac" && git add -A && git commit -qm mac && git fetch -q && git merge -q --no-edit origin/main >/dev/null 2>&1)
+printf 'cleaned up by hand\n' > "$T/mac/ideias/a.md"
+bash "$HOOK" push 2>/dev/null
+check "the edit to the conflicted note is kept" 'git -C "$T/remote.git" grep -q "cleaned up by hand" main'
+
+echo "a local commit that can't be made"
+setup
+printf 'x\n' > "$T/mac/ideias/x.md"; touch "$T/mac/.git/index.lock"
+bash "$HOOK" push 2>/dev/null; code=$?
+check "fails instead of silently syncing nothing" '[ $code = 1 ]'
+rm -f "$T/mac/.git/index.lock"
+
+echo "user git config doesn't break the hook"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
+printf 'mac new\n' > "$T/mac/ideias/n.md"
+git config --global merge.ff only; git config --global commit.gpgsign true; git config --global user.signingkey nokey
+bash "$HOOK" push 2>/dev/null; code=$?
+git config --global --unset merge.ff; git config --global --unset commit.gpgsign; git config --global --unset user.signingkey
+check "merge.ff=only and commit.gpgsign without a key don't block a sync" '[ $code = 0 ] && [ "$(remote_file ideias/n.md)" = "mac new" ]'
+
+echo "names that differ only in case (one file on macOS)"
+setup
+(cd "$T/other" && printf 'phone\n' > ideias/Nota.md && git add -A && git commit -qm phone && git push -q)
+printf 'mac\n' > "$T/mac/ideias/nota.md"
+bash "$HOOK" push 2>/dev/null
+check "both texts survive on the remote" 'git -C "$T/remote.git" grep -q "^phone" main && git -C "$T/remote.git" grep -q "^mac" main'
+
+echo "a remote file where the Mac has a folder"
+setup
+(cd "$T/other" && printf 'a file\n' > proj && git add -A && git commit -qm p && git push -q)
+mkdir -p "$T/mac/proj"; printf 'n\n' > "$T/mac/proj/n.md"
+bash "$HOOK" push 2>"$T/err"; code=$?
+check "is reported as a conflict, and both survive" '[ $code = 1 ] && [ "$(remote_file proj/n.md)" = "n" ] && git -C "$T/remote.git" grep -q "a file" main'
+
 echo "a clone left mid-rebase by an older hook"
 setup
 (cd "$T/other" && printf 'phone\n' > ideias/a.md && git commit -qam phone && git push -q)
