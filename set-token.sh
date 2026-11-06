@@ -1,10 +1,10 @@
 #!/bin/bash
-# Lê o token do GitHub do clipboard, testa no repositório e só então manda pro Worker.
+# Reads the GitHub token from the clipboard, tests it against the notes repo, and only then sends it to the Worker.
 cd "$(dirname "$0")"
 T=$(pbpaste | tr -d '[:space:]')
-case "$T" in github_pat_*|ghp_*) ;; *) echo "O clipboard não tem um token do GitHub (deveria começar com github_pat_). Copie o token e rode de novo."; exit 1;; esac
+case "$T" in github_pat_*|ghp_*) ;; *) echo "The clipboard does not hold a GitHub token (it should start with github_pat_). Copy the token and run again."; exit 1;; esac
 code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $T" https://api.github.com/repos/YudiG12/segundo-cerebro/contents/)
-[ "$code" = 200 ] || { echo "GitHub recusou o token (HTTP $code). Confira o acesso ao repositório segundo-cerebro e a permissão Contents."; exit 1; }
+[ "$code" = 200 ] || { echo "GitHub rejected the token (HTTP $code). Check access to the segundo-cerebro repo and the Contents permission."; exit 1; }
 printf '%s' "$T" | npx wrangler secret put GITHUB_TOKEN 2>&1 | tail -1
 pbcopy </dev/null
-echo "Token ok e salvo no Worker. Clipboard limpo."
+echo "Token OK and saved to the Worker. Clipboard cleared."

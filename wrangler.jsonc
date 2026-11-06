@@ -4,9 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-11",
   "compatibility_flags": ["nodejs_compat"],
-  // as notas ficam no GitHub (YudiG12/segundo-cerebro); secrets: GITHUB_TOKEN, WEBHOOK_SECRET, MCP_TOKEN
-  // modelo de embedding multilíngue (as notas são em português)
+  // notes live on GitHub (YudiG12/segundo-cerebro); secrets: GITHUB_TOKEN, WEBHOOK_SECRET, MCP_TOKEN
+  // multilingual embedding model (the notes are written in Portuguese)
   "ai": { "binding": "AI" },
-  // índice de busca por sentido: 1024 dimensões, cosseno. Caminhos relativos à raiz do repositório.
+  // semantic search index: 1024 dimensions, cosine. Paths are relative to the repo root.
   "vectorize": [{ "binding": "VECTORS", "index_name": "segundo-cerebro" }]
 }

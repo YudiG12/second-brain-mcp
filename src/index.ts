@@ -1,6 +1,6 @@
-// Segundo cérebro do Yudi como servidor MCP remoto.
-// GitHub (YudiG12/segundo-cerebro) guarda as notas: é a fonte da verdade, com histórico.
-// Vectorize é só um índice por cima, atualizado pelo webhook de push e reconstruível a qualquer hora.
+// Yudi's second brain as a remote MCP server.
+// GitHub (YudiG12/segundo-cerebro) stores the notes: it is the source of truth, with full history.
+// Vectorize is only an index on top, updated by the push webhook and rebuildable at any time.
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { env } from "cloudflare:workers";
@@ -17,13 +17,13 @@ const E = env as unknown as Env;
 
 const REPO = "YudiG12/segundo-cerebro";
 const BRANCH = "main";
-const EMBED_MODEL = "@cf/baai/bge-m3"; // multilíngue, 1024 dimensões
+const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual, 1024 dimensions
 const CHUNK_CHARS = 1200;
-const MAX_CHUNKS = 50; // teto de pedaços por nota, usado pra apagar sobras
+const MAX_CHUNKS = 50; // max chunks per note, also used to delete leftovers
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 
-// tira acento e caixa, pra "decisão" achar "decisao"
+// strips accents and case, so "decisão" matches "decisao"
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 // ---------- GitHub ----------
@@ -34,7 +34,7 @@ async function gh(path: string, init: RequestInit = {}, accept = "application/vn
     headers: {
       Authorization: `Bearer ${E.GITHUB_TOKEN}`,
       Accept: accept,
-      "User-Agent": "cerebro-mcp",
+      "User-Agent": "second-brain-mcp",
       "X-GitHub-Api-Version": "2022-11-28",
       ...(init.headers ?? {}),
     },
@@ -45,7 +45,7 @@ const encPath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
 
 async function listKeys(prefix = ""): Promise<string[]> {
   const res = await gh(`/git/trees/${BRANCH}?recursive=1`);
-  if (!res.ok) throw new Error(`GitHub ${res.status} ao listar`);
+  if (!res.ok) throw new Error(`GitHub ${res.status} while listing notes`);
   const { tree } = (await res.json()) as { tree: { path: string; type: string }[] };
   return tree.filter((t) => t.type === "blob" && t.path.endsWith(".md") && t.path.startsWith(prefix)).map((t) => t.path);
 }
@@ -55,14 +55,14 @@ async function readFile(path: string, ref = BRANCH): Promise<string | null> {
   return res.ok ? res.text() : null;
 }
 
-// base64 de UTF-8 (btoa sozinho quebra com acento)
+// base64 of UTF-8 (btoa alone breaks on accented characters)
 function b64(s: string) {
   let bin = "";
   for (const b of new TextEncoder().encode(s)) bin += String.fromCharCode(b);
   return btoa(bin);
 }
 
-// sha atual do arquivo (o GitHub exige pra sobrescrever ou apagar); null se não existe
+// current file sha (GitHub requires it to overwrite or delete); null if the file doesn't exist
 async function fileSha(path: string): Promise<string | null> {
   const res = await gh(`/contents/${encPath(path)}?ref=${BRANCH}`);
   return res.ok ? ((await res.json()) as { sha: string }).sha : null;
@@ -74,31 +74,31 @@ async function writeFile(path: string, body: string, message: string) {
     method: "PUT",
     body: JSON.stringify({ message, content: b64(body), branch: BRANCH, ...(sha ? { sha } : {}) }),
   });
-  if (!res.ok) throw new Error(`GitHub ${res.status} ao salvar: ${await res.text()}`);
+  if (!res.ok) throw new Error(`GitHub ${res.status} while saving: ${await res.text()}`);
 }
 
 async function deleteFile(path: string, message: string) {
   const sha = await fileSha(path);
-  if (!sha) throw new Error(`Nota não encontrada: ${path}`);
+  if (!sha) throw new Error(`Note not found: ${path}`);
   const res = await gh(`/contents/${encPath(path)}`, { method: "DELETE", body: JSON.stringify({ message, sha, branch: BRANCH }) });
-  if (!res.ok) throw new Error(`GitHub ${res.status} ao apagar: ${await res.text()}`);
+  if (!res.ok) throw new Error(`GitHub ${res.status} while deleting: ${await res.text()}`);
 }
 
-// caminho relativo à raiz do repo, só Markdown, sem sair da pasta
+// path relative to the repo root, Markdown only, never outside the repo
 function checkPath(path: string) {
   const p = path.trim().replace(/^\/+/, "");
-  if (!p.endsWith(".md") || p.split("/").some((seg) => seg === ".." || seg === "")) throw new Error(`Caminho inválido: ${path} (use algo como projetos/nome.md)`);
+  if (!p.endsWith(".md") || p.split("/").some((seg) => seg === ".." || seg === "")) throw new Error(`Invalid path: ${path} (use something like projetos/name.md)`);
   return p;
 }
 
-// ---------- Índice ----------
+// ---------- Index ----------
 
 async function embed(texts: string[]): Promise<number[][]> {
   const res = (await E.AI.run(EMBED_MODEL as any, { text: texts })) as any;
   return res.data;
 }
 
-// quebra por parágrafo, juntando até ~1200 caracteres por pedaço
+// splits by paragraph, packing up to ~1200 characters per chunk
 function chunk(body: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -113,19 +113,19 @@ function chunk(body: string): string[] {
   return out.slice(0, MAX_CHUNKS);
 }
 
-// id estável e curto (o Vectorize aceita até 64 bytes): hash do caminho + número do pedaço
+// short, stable id (Vectorize accepts up to 64 bytes): path hash + chunk number
 async function pathHash(path: string) {
   const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(path));
   return [...new Uint8Array(h)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ids de pedaços a partir de `from`: o que sobrou de uma versão mais longa da nota
+// chunk ids from `from` onward: leftovers from a longer version of the note
 async function idsFrom(path: string, from: number) {
   const h = await pathHash(path);
   return Array.from({ length: MAX_CHUNKS - from }, (_, i) => `${h}-${from + i}`);
 }
 
-// indexa uma nota: upsert pelo mesmo id (rodar de novo não duplica) e apaga pedaços que sobraram
+// indexes a note: upsert by the same id (re-running doesn't duplicate) and deletes leftover chunks
 async function indexNote(path: string, body: string) {
   const parts = chunk(body);
   const h = await pathHash(path);
@@ -141,7 +141,7 @@ async function unindexNote(path: string) {
   await E.VECTORS.deleteByIds(await idsFrom(path, 0));
 }
 
-// ---------- Webhook do GitHub ----------
+// ---------- GitHub webhook ----------
 
 async function validSignature(body: string, header: string | null, secret: string) {
   if (!header?.startsWith("sha256=") || !secret) return false;
@@ -152,7 +152,7 @@ async function validSignature(body: string, header: string | null, secret: strin
 
 type PushEvent = { ref: string; after: string; commits: { added: string[]; modified: string[]; removed: string[] }[] };
 
-// junta os commits do push: o último estado de cada arquivo vence
+// merges the commits in a push: the last state of each file wins
 async function applyPush(ev: PushEvent) {
   const state = new Map<string, "upsert" | "remove">();
   for (const c of ev.commits) {
@@ -169,26 +169,26 @@ async function applyPush(ev: PushEvent) {
   }
 }
 
-// ---------- Ferramentas MCP ----------
+// ---------- MCP tools ----------
 
 function createServer() {
-  const server = new McpServer({ name: "segundo-cerebro", version: "0.3.0" });
+  const server = new McpServer({ name: "second-brain", version: "0.3.0" });
 
   server.registerTool(
     "list_notes",
-    { description: "Lista as notas do segundo cérebro do Yudi (caminhos dos arquivos Markdown, ex.: ideias/..., projetos/..., decisoes/...).", inputSchema: { prefix: z.string().optional() } },
-    async ({ prefix }) => text((await listKeys(prefix ?? "")).join("\n") || "Nenhuma nota."),
+    { description: "Lists the notes in Yudi's second brain (Markdown file paths, e.g. ideias/..., projetos/..., decisoes/...).", inputSchema: { prefix: z.string().optional() } },
+    async ({ prefix }) => text((await listKeys(prefix ?? "")).join("\n") || "No notes."),
   );
 
   server.registerTool(
     "read_note",
-    { description: "Lê uma nota inteira pelo caminho (ex.: visao-geral.md, projetos/cafezinho.md).", inputSchema: { path: z.string() } },
-    async ({ path }) => text((await readFile(path)) ?? `Nota não encontrada: ${path}`),
+    { description: "Reads a whole note by path (e.g. visao-geral.md, projetos/cafezinho.md).", inputSchema: { path: z.string() } },
+    async ({ path }) => text((await readFile(path)) ?? `Note not found: ${path}`),
   );
 
   server.registerTool(
     "search_notes",
-    { description: "Busca por palavras exatas nas notas (ignora acento e maiúscula). Bom pra nomes, siglas e termos.", inputSchema: { query: z.string() } },
+    { description: "Exact keyword search across notes (ignores accents and case). Good for names, acronyms and terms.", inputSchema: { query: z.string() } },
     async ({ query }) => {
       const terms = norm(query).split(/\s+/).filter(Boolean);
       const keys = await listKeys();
@@ -200,87 +200,87 @@ function createServer() {
           if (terms.every((t) => l.includes(t))) hits.push(`${key}:${i + 1}: ${line.trim()}`);
         }),
       );
-      return text(hits.slice(0, 40).join("\n") || "Nada encontrado.");
+      return text(hits.slice(0, 40).join("\n") || "Nothing found.");
     },
   );
 
   server.registerTool(
     "semantic_search",
-    { description: "Busca por sentido nas notas (embeddings + Vectorize). Bom pra perguntas como 'o que eu decidi sobre X'.", inputSchema: { query: z.string(), topK: z.number().int().min(1).max(10).optional() } },
+    { description: "Semantic search across notes (embeddings + Vectorize). Good for questions like 'what did I decide about X'.", inputSchema: { query: z.string(), topK: z.number().int().min(1).max(10).optional() } },
     async ({ query, topK }) => {
       const [q] = await embed([query]);
       const res = await E.VECTORS.query(q, { topK: topK ?? 5, returnMetadata: "all" });
       const out = res.matches.map((m) => `[${m.score.toFixed(2)}] ${m.metadata?.path} (#${m.metadata?.seq})\n${m.metadata?.text}`);
-      return text(out.join("\n\n---\n\n") || "Nada encontrado.");
+      return text(out.join("\n\n---\n\n") || "Nothing found.");
     },
   );
 
   server.registerTool(
     "save_idea",
-    { description: "Salva uma ideia nova em ideias/AAAA-MM-DD-slug.md (commit no GitHub) e indexa. O Mac puxa sozinho na próxima conversa.", inputSchema: { title: z.string(), content: z.string() } },
+    { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (a GitHub commit) and indexes it. The local clone pulls it on the next session.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {
-      const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // AAAA-MM-DD no horário de Brasília
+      const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD in Brasília time
       const slug = norm(title).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
       const path = `ideias/${day}-${slug}.md`;
       const body = `# ${title}\n\n${content}\n`;
-      await writeFile(path, body, `ideia: ${title} (via MCP)`);
-      await indexNote(path, body); // o webhook reindexa também; aqui é pra já aparecer na busca
-      return text(`Salvo em ${path}`);
+      await writeFile(path, body, `idea: ${title} (via MCP)`);
+      await indexNote(path, body); // the webhook re-indexes too; this makes it searchable right away
+      return text(`Saved to ${path}`);
     },
   );
 
   server.registerTool(
     "write_note",
-    { description: "Cria ou sobrescreve uma nota inteira em qualquer pasta (ex.: projetos/cafezinho.md). Pra mudar só um trecho, prefira edit_note.", inputSchema: { path: z.string(), content: z.string() } },
+    { description: "Creates or overwrites a whole note in any folder (e.g. projetos/cafezinho.md). To change only part of it, prefer edit_note.", inputSchema: { path: z.string(), content: z.string() } },
     async ({ path, content }) => {
       const p = checkPath(path);
       const existed = (await fileSha(p)) !== null;
-      await writeFile(p, content, `${existed ? "edita" : "cria"}: ${p} (via MCP)`);
+      await writeFile(p, content, `${existed ? "edit" : "create"}: ${p} (via MCP)`);
       await indexNote(p, content);
-      return text(`${existed ? "Atualizada" : "Criada"}: ${p}`);
+      return text(`${existed ? "Updated" : "Created"}: ${p}`);
     },
   );
 
   server.registerTool(
     "edit_note",
-    { description: "Troca um trecho exato de uma nota por outro (old_text precisa aparecer uma vez só). new_text vazio apaga o trecho. Use read_note antes pra copiar o trecho exato.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
+    { description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
     async ({ path, old_text, new_text }) => {
       const p = checkPath(path);
       const body = await readFile(p);
-      if (body === null) return text(`Nota não encontrada: ${p}`);
+      if (body === null) return text(`Note not found: ${p}`);
       const n = body.split(old_text).length - 1;
-      if (n !== 1) return text(n === 0 ? "Trecho não encontrado. Leia a nota e copie o trecho exato." : `O trecho aparece ${n} vezes; inclua mais contexto pra ficar único.`);
+      if (n !== 1) return text(n === 0 ? "Passage not found. Read the note and copy the exact passage." : `The passage appears ${n} times; include more context so it is unique.`);
       const next = body.replace(old_text, () => new_text);
-      await writeFile(p, next, `edita: ${p} (via MCP)`);
+      await writeFile(p, next, `edit: ${p} (via MCP)`);
       await indexNote(p, next);
-      return text(`Editada: ${p}`);
+      return text(`Edited: ${p}`);
     },
   );
 
   server.registerTool(
     "delete_note",
-    { description: "Apaga uma nota (fica recuperável no histórico do Git).", inputSchema: { path: z.string() } },
+    { description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
     async ({ path }) => {
       const p = checkPath(path);
-      await deleteFile(p, `apaga: ${p} (via MCP)`);
+      await deleteFile(p, `delete: ${p} (via MCP)`);
       await unindexNote(p);
-      return text(`Apagada: ${p}`);
+      return text(`Deleted: ${p}`);
     },
   );
 
   server.registerTool(
     "move_note",
-    { description: "Move ou renomeia uma nota (ex.: ideias/x.md para projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
+    { description: "Moves or renames a note (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
     async ({ from, to }) => {
       const a = checkPath(from), b = checkPath(to);
       const body = await readFile(a);
-      if (body === null) return text(`Nota não encontrada: ${a}`);
-      if ((await fileSha(b)) !== null) return text(`Já existe uma nota em ${b}`);
+      if (body === null) return text(`Note not found: ${a}`);
+      if ((await fileSha(b)) !== null) return text(`A note already exists at ${b}`);
       await writeFile(b, body, `move: ${a} -> ${b} (via MCP)`);
       await deleteFile(a, `move: ${a} -> ${b} (via MCP)`);
       await indexNote(b, body);
       await unindexNote(a);
-      return text(`Movida: ${a} -> ${b}`);
+      return text(`Moved: ${a} -> ${b}`);
     },
   );
 
@@ -292,12 +292,12 @@ const mcp = createMcpHandler(createServer);
 export default {
   async fetch(request: Request, envArg: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
-    // URL secreta: /<token>/mcp. Sem o token, 404, como se nada existisse.
+    // secret URL: /<token>/mcp. Without the token it's a 404, as if nothing existed.
     const prefix = `/${envArg.MCP_TOKEN}`;
     if (!envArg.MCP_TOKEN || !url.pathname.startsWith(prefix + "/")) return new Response("Not found", { status: 404 });
     url.pathname = url.pathname.slice(prefix.length);
 
-    // push no repositório: reindexa o que mudou e apaga do índice o que foi removido
+    // push to the repo: re-index what changed and remove deleted notes from the index
     if (url.pathname === "/github-webhook" && request.method === "POST") {
       const body = await request.text();
       if (!(await validSignature(body, request.headers.get("X-Hub-Signature-256"), envArg.WEBHOOK_SECRET))) return new Response("bad signature", { status: 401 });
@@ -310,7 +310,7 @@ export default {
       return new Response("ok", { status: 202 });
     }
 
-    // reconstrói o índice inteiro a partir do GitHub (POST /<token>/reindex)
+    // rebuilds the whole index from GitHub (POST /<token>/reindex)
     if (url.pathname === "/reindex" && request.method === "POST") {
       const keys = await listKeys();
       let chunks = 0;
