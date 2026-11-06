@@ -53,6 +53,9 @@ export class FakeIndex implements VectorIndex {
   async deleteByIds(ids: string[]) {
     for (const id of ids) this.vectors.delete(id);
   }
+  async pathOf(id: string) {
+    return this.vectors.get(id)?.metadata.path ?? null;
+  }
   pathsIndexed() {
     return [...new Set([...this.vectors.values()].map((v) => v.metadata.path))].sort();
   }

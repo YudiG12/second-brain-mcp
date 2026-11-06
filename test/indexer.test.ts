@@ -88,6 +88,34 @@ describe("index(path) (spec v2 §5.2)", () => {
   });
 });
 
+describe("drop(pathHash) (rebuild)", () => {
+  it("deletes the vectors of a path hash no note produces", async () => {
+    await index.upsert([{ id: "ghost-0", values: [1], metadata: { path: "ghost.md", seq: 0, text: "" } }, { id: "ghost-49", values: [1], metadata: { path: "ghost.md", seq: 49, text: "" } }]);
+    expect(await handle({ type: "drop", pathHash: "ghost" } as any, deps)).toEqual({ kind: "dropped", pathHash: "ghost" });
+    expect(index.vectors.size).toBe(0);
+  });
+});
+
+describe("drop(pathHash), re-checked at head", () => {
+  it("finds the note through chunk 0's metadata, without walking every note", async () => {
+    const { pathHash } = await import("../src/lib/notes");
+    await handle({ type: "index", path: "a.md", reason: "write" }, deps);
+    const walks = { n: 0 };
+    const changedPaths = notes.changedPaths.bind(notes);
+    notes.changedPaths = async (a, b) => (walks.n++, changedPaths(a, b));
+    expect(await handle({ type: "drop", pathHash: await pathHash("a.md") }, deps)).toEqual({ kind: "requeued", path: "a.md" });
+    expect(walks.n).toBe(0);
+  });
+
+  it("re-indexes instead of dropping when a note at the head now produces that hash", async () => {
+    const { pathHash } = await import("../src/lib/notes");
+    notes.commit({ "new.md": "created after the rebuild's snapshot" });
+    const h = await pathHash("new.md");
+    expect(await handle({ type: "drop", pathHash: h }, deps)).toEqual({ kind: "requeued", path: "new.md" });
+    expect(queue.sent).toEqual([{ type: "index", path: "new.md", reason: "rebuild" }]);
+  });
+});
+
 describe("pushed events", () => {
   it("ignores message types it doesn't know, instead of failing into the dead-letter queue", async () => {
     expect((await handle({ type: "cf.artifacts.repo.cloned" } as any, deps)).kind).toBe("ignored");

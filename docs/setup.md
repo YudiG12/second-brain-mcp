@@ -15,7 +15,7 @@ Order matters: the notes must be in Artifacts before any deploy that reads from 
 4. **Secrets:**
    - `scripts/secrets.sh rotate`: new `MCP_TOKEN`, saved to `.dev.vars` (gitignored) first, then to the Worker. It asks for confirmation, since every client must reconnect.
    - `scripts/secrets.sh admin`: new `ADMIN_SECRET`, saved to the Worker, `.dev.vars` and the macOS Keychain (the Mac sync hook reads it there).
-5. **Index:** `POST /<MCP_TOKEN>/reindex` once: it enqueues every note.
+5. **Index:** start a rebuild once: `POST /admin/reconcile?mode=rebuild` with `Authorization: Bearer <ADMIN_SECRET>`. It enqueues every note. After that, the daily reconciliation keeps the index in line.
 6. **Clients:** reconnect each MCP client to `https://second-brain-mcp.yudiganeko.workers.dev/<MCP_TOKEN>/mcp`.
 
 ## CI deploy

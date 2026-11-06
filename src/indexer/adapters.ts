@@ -99,6 +99,10 @@ export class VectorizeAdapter implements VectorIndex {
   async deleteByIds(ids: string[]) {
     await this.vectors.deleteByIds(ids);
   }
+  async pathOf(id: string) {
+    const [v] = await this.vectors.getByIds([id]);
+    return (v?.metadata?.path as string | undefined) ?? null;
+  }
 }
 
 export class WorkersAiEmbedder implements Embedder {
@@ -107,4 +111,46 @@ export class WorkersAiEmbedder implements Embedder {
     const res = (await this.ai.run(EMBED_MODEL as any, { text: texts })) as unknown as { data: number[][] };
     return res.data;
   }
+}
+
+/** Every Markdown note at a commit with its blob sha (reconciliation's source snapshot). */
+export async function allNotes(artifacts: Artifacts, repoName: string, commit: string) {
+  using repo = await artifacts.get(repoName);
+  const c = await repo.readCommit(commit);
+  if (!c) return [];
+  const out: { path: string; sha: string }[] = [];
+  const walk = async (tree: string, base: string): Promise<void> => {
+    const entries = (await repo.readTree(tree)) ?? [];
+    await Promise.all(
+      entries.map(async (e) => {
+        if (e.type === "tree") await walk(e.hash, `${base}${e.name}/`);
+        else if (e.type === "blob" && e.name.endsWith(".md")) out.push({ path: base + e.name, sha: e.hash });
+      }),
+    );
+  };
+  await walk(c.treeHash, "");
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
+ * Vector ids grouped by path hash, through the REST API (the binding can't list). Needs an API
+ * token with the Vectorize Read permission; without one, returns null and the rebuild skips
+ * vector orphans.
+ */
+export async function vectorPathHashes(accountId: string, indexName: string, token: string | undefined): Promise<string[] | null> {
+  if (!token) return null;
+  const hashes = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/vectorize/v2/indexes/${indexName}/list?count=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const body = (await res.json()) as { success: boolean; result?: { vectors: { id: string }[]; isTruncated: boolean; nextCursor?: string } };
+    if (!body.success || !body.result) throw new Error(`list-vectors failed: HTTP ${res.status}`);
+    for (const v of body.result.vectors) {
+      const dash = v.id.lastIndexOf("-");
+      if (dash > 0) hashes.add(v.id.slice(0, dash)); // our ids are <hash>-<seq>; skip anything else
+    }
+    cursor = body.result.isTruncated ? body.result.nextCursor : undefined;
+  } while (cursor);
+  return [...hashes].sort();
 }

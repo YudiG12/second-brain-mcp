@@ -13,6 +13,11 @@ describe("routing", () => {
     expect(res.status).not.toBe(404);
   });
 
+  it.each(["/test-token/reindex", "/test-token/anything"])("serves only /mcp under the token prefix (%s is 404)", async (path) => {
+    const res = await exports.default.fetch(`https://example.com${path}`, { method: "POST" });
+    expect(res.status).toBe(404);
+  });
+
   it("no longer serves the GitHub webhook (ADR 007; closes #42 by removal)", async () => {
     const res = await exports.default.fetch("https://example.com/test-token/github-webhook", {
       method: "POST",
@@ -44,8 +49,22 @@ describe("read_note path rules (#30)", () => {
 });
 
 describe("admin routes", () => {
-  it.each([undefined, "Bearer wrong", "test-admin"])("hide /admin/artifacts-token without the admin secret (%s)", async (auth) => {
-    const res = await exports.default.fetch("https://example.com/admin/artifacts-token", {
+  it("starts a rebuild with the admin secret and returns its instance id", async () => {
+    const res = await exports.default.fetch("https://example.com/admin/reconcile?mode=rebuild", { method: "POST", headers: { Authorization: "Bearer test-admin" } });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { id: string; mode: string };
+    expect(body.mode).toBe("rebuild");
+    expect(body.id).toMatch(/^manual-rebuild-[0-9a-f-]{36}$/);
+  });
+
+  it.each([
+    ["/admin/artifacts-token", undefined],
+    ["/admin/artifacts-token", "Bearer wrong"],
+    ["/admin/artifacts-token", "test-admin"],
+    ["/admin/reconcile", undefined],
+    ["/admin/reconcile", "Bearer wrong"],
+  ])("hide %s without the admin secret (%s)", async (route, auth) => {
+    const res = await exports.default.fetch(`https://example.com${route}`, {
       method: "POST",
       headers: auth ? { Authorization: auth } : {},
     });

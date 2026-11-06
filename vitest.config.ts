@@ -23,7 +23,8 @@ export default defineConfig({
         compatibilityFlags: ["nodejs_compat"],
         d1Databases: ["DB"], // local D1; tests apply migrations/ themselves
         queueProducers: { INDEX_JOBS: "index-jobs" },
-        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", NOTES_REPO: "notes", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
+        workflows: { RECONCILE: { name: "reconcile", className: "Reconcile" } },
+        bindings: { MCP_TOKEN: "test-token", ADMIN_SECRET: "test-admin", NOTES_REPO: "notes", VECTORIZE_INDEX: "test-index", CF_ACCOUNT_ID: "test-account", TEST_MIGRATIONS: await readD1Migrations("./migrations") },
       },
     })),
   ],

@@ -67,7 +67,7 @@ A **full rebuild** is the same Workflow, except the index snapshot comes from Ve
 - **Two mechanisms** to configure, monitor and test instead of one.
 - **Workflow billing:** steps and storage (500,000 steps a month included on Workers Paid). One user's daily run is a few dozen steps.
 - **Every step must be idempotent,** because Workflows and Queues both re-run work after failures.
-- **A Cloudflare API token** for the rebuild's `list-vectors` call: one more secret.
+- **A Cloudflare API token** for the rebuild's `list-vectors` call: one more secret. It is optional: without it, a rebuild still re-indexes every note and removes manifest orphans, but can't find vectors left without a manifest row (spec v2 §8).
 - **Fixes from reconciliation are not instant:** they go through the same Queue as everything else.
 - **Up to a day of staleness** for an event that never arrives.
 
