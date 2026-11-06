@@ -7,12 +7,14 @@ How to recreate the infrastructure from this repo ([ADR 006](adr/006-wrangler-an
 - `npx wrangler login` with access to the Cloudflare account in `wrangler.jsonc`.
 
 ## Steps
+Order matters: the notes must be in Artifacts before any deploy that reads from it, or the server lists no notes and the first MCP write starts a separate history.
+
 1. **Resources:** `scripts/setup.sh`. Creates what is missing (Vectorize index, Artifacts repo `notes`) and is safe to run again. Changing an existing Workers subdomain is a dashboard step; the script stops and says so.
-2. **Deploy:** `npx wrangler deploy` the first time (the Worker must exist before it has secrets). After that, merges to `main` deploy through CI.
-3. **Secrets:**
+2. **Notes:** push the full history into the Artifacts repo once, from a clone: `git push <remote> main`, with a token from `npx wrangler artifacts repos issue-token notes --namespace second-brain --scope write`. Then point the Mac clone at it: `git remote set-url origin <remote>`.
+3. **Deploy:** `npx wrangler deploy` the first time (the Worker must exist before it has secrets). After that, merges to `main` deploy through CI.
+4. **Secrets:**
    - `scripts/secrets.sh rotate`: new `MCP_TOKEN`, saved to `.dev.vars` (gitignored) first, then to the Worker. It asks for confirmation, since every client must reconnect.
    - `scripts/secrets.sh admin`: new `ADMIN_SECRET`, saved to the Worker, `.dev.vars` and the macOS Keychain (the Mac sync hook reads it there).
-4. **Notes:** push the full history into the Artifacts repo once (`git push <remote> main` from a clone, with a token from `npx wrangler artifacts repos issue-token notes --namespace second-brain --scope write`), then point the Mac clone at it: `git remote set-url origin <remote>`.
 5. **Index:** `POST /<MCP_TOKEN>/reindex` once.
 6. **Clients:** reconnect each MCP client to `https://second-brain-mcp.yudiganeko.workers.dev/<MCP_TOKEN>/mcp`.
 

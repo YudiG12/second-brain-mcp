@@ -31,7 +31,8 @@ jobs:
       - run: npm test
       - name: Publish the Vitest UI report
         id: ui
-        if: always() && github.event_name == 'pull_request' && hashFiles('reports/html/index.html') != ''
+        # public report of the test code: only once the repo itself is public
+        if: always() && github.event_name == 'pull_request' && !github.event.repository.private && hashFiles('reports/html/index.html') != ''
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -40,6 +41,7 @@ jobs:
           echo "url=https://pr-${{ github.event.pull_request.number }}-second-brain-mcp-tests.yudiganeko.workers.dev" >> "$GITHUB_OUTPUT"
       - name: Post the test report on the PR
         if: always() && github.event_name == 'pull_request' && hashFiles('reports/tests.json') != ''
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

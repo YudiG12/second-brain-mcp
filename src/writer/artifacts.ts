@@ -10,11 +10,15 @@ const BRANCH = "main";
 const AUTHOR = { name: "second-brain-mcp", email: "mcp@second-brain.invalid" };
 const TOKEN_TTL = 3600; // seconds
 const TOKEN_MARGIN = 300; // renew 5 minutes before expiry (spec v2 §5.1)
+const PUSH_TIMEOUT = 15_000; // one slow push must not hold the queue (spec v2 §5.1)
+const REJECTED = /non-fast-forward|fetch first|stale|not-fast-forward/i;
 
 type Remote = { url: string; onAuth: () => { username: string; password: string } };
 
 export class ArtifactsWorkingCopy implements WorkingCopy {
   private fs: any = null;
+  private cache: object = {}; // isomorphic-git's parsed-pack cache, shared across calls
+  private head: string | null = null; // remote tip from the last sync
   private token: { secret: string; url: string; expiresAt: number } | null = null;
 
   constructor(
@@ -28,6 +32,8 @@ export class ArtifactsWorkingCopy implements WorkingCopy {
 
   drop() {
     this.fs = null;
+    this.cache = {};
+    this.head = null;
   }
 
   private async remote(): Promise<Remote> {
@@ -44,15 +50,16 @@ export class ArtifactsWorkingCopy implements WorkingCopy {
     const { url, onAuth } = await this.remote();
     if (!this.fs) {
       const fs = createFsFromVolume(new Volume());
-      await git.clone({ fs, http, dir: DIR, url, onAuth, ref: BRANCH, singleBranch: true, depth: 1 });
+      await git.clone({ fs, http, dir: DIR, url, onAuth, ref: BRANCH, singleBranch: true, depth: 1, cache: this.cache });
       this.fs = fs;
     } else {
-      await git.fetch({ fs: this.fs, http, dir: DIR, url, onAuth, ref: BRANCH, singleBranch: true, depth: 1 });
+      await git.fetch({ fs: this.fs, http, dir: DIR, url, onAuth, ref: BRANCH, singleBranch: true, depth: 1, cache: this.cache });
       const tip = await git.resolveRef({ fs: this.fs, dir: DIR, ref: `refs/remotes/origin/${BRANCH}` });
       await git.writeRef({ fs: this.fs, dir: DIR, ref: `refs/heads/${BRANCH}`, value: tip, force: true });
-      await git.checkout({ fs: this.fs, dir: DIR, ref: BRANCH, force: true });
+      await git.checkout({ fs: this.fs, dir: DIR, ref: BRANCH, force: true, cache: this.cache });
     }
-    return git.resolveRef({ fs: this.fs, dir: DIR, ref: BRANCH });
+    this.head = await git.resolveRef({ fs: this.fs, dir: DIR, ref: BRANCH });
+    return this.head;
   }
 
   async read(path: string) {
@@ -81,20 +88,23 @@ export class ArtifactsWorkingCopy implements WorkingCopy {
   async push(): Promise<PushOutcome> {
     const { url, onAuth } = await this.remote();
     try {
-      const res = await git.push({ fs: this.fs, http, dir: DIR, url, onAuth, ref: BRANCH });
+      const res = await git.push({ fs: this.fs, http, dir: DIR, url, onAuth, ref: BRANCH, cache: this.cache, signal: AbortSignal.timeout(PUSH_TIMEOUT) });
       if (res.ok) return "ok";
-      const reason = `${res.error ?? ""} ${JSON.stringify(res.refs ?? {})}`;
-      if (/fast-forward|fetch first|stale|non-ff/i.test(reason)) return "rejected";
-      throw new Error(`push failed: ${reason}`);
+      if (REJECTED.test(`${res.error ?? ""} ${JSON.stringify(res.refs ?? {})}`)) return "rejected";
+      throw new Error(`push failed: ${res.error}`);
     } catch (e: any) {
+      // the client sees a moved tip: PushRejectedError. The server refuses the ref: GitPushError with per-ref errors.
       if (e?.code === "PushRejectedError") return "rejected";
+      if (e?.code === "GitPushError" && REJECTED.test(JSON.stringify(e?.data ?? {}))) return "rejected";
       throw e;
     }
   }
 
   async contains(commit: string) {
+    if (this.head === commit) return true;
+    // the fetched tip may be a later commit from the Mac: walk back from it (the notes history is linear: the Mac rebases)
     using repo = await this.artifacts.get(this.repoName);
-    const log = await repo.log({ ref: BRANCH, limit: 100 });
+    const log = await repo.log({ ref: this.head ?? BRANCH, limit: 100 });
     return log.some((c) => c.hash === commit);
   }
 }

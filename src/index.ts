@@ -8,7 +8,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { checkPath, chunk, idsFrom, ideaPath, norm, pathHash } from "./lib/notes";
 import { listNotes, readNote } from "./notes-store";
-import type { Operation } from "./writer/types";
+import type { Operation, WriteResult } from "./writer/types";
 
 export { RepoWriter } from "./writer/durable";
 
@@ -59,18 +59,30 @@ function writer() {
   return E.WRITER.get(E.WRITER.idFromName(E.NOTES_REPO));
 }
 
-// Sends one operation to the repository's writer and describes the result for the client.
-async function write(op: Operation): Promise<{ ok: boolean; message: string }> {
-  const r = await writer().run(op);
+// Sends one operation to the repository's writer, then indexes exactly what was committed.
+// Interim until the Queue indexer (PR 4): indexing runs inline, and an indexing failure doesn't fail the write.
+async function write(op: Operation, done: string): Promise<string> {
+  let r: WriteResult;
+  try {
+    r = await writer().run(op);
+  } catch (e) {
+    // the object may have reset mid-write (e.g. during a deploy): the push may or may not have landed
+    return `Not sure the change was saved (${String(e)}). Check with read_note before retrying.`;
+  }
   switch (r.status) {
-    case "ok":
-      return { ok: true, message: `(${r.commit.slice(0, 7)})` };
     case "failed":
-      return { ok: false, message: r.reason };
+      return r.reason;
     case "busy":
-      return { ok: false, message: "The notes are changing too fast right now; nothing was saved. Try again." };
+      return "The notes are changing too fast right now; nothing was saved. Try again.";
     case "unknown":
-      return { ok: false, message: `Not sure the change was saved (${r.reason}). Check with read_note before retrying.` };
+      return `Not sure the change was saved (${r.reason}). Check with read_note before retrying.`;
+  }
+  const saved = `${done} (${r.commit.slice(0, 7)})`;
+  try {
+    for (const c of r.changes) c.content === null ? await unindexNote(c.path) : await indexNote(c.path, c.content);
+    return saved;
+  } catch (e) {
+    return `${saved}. Search will catch up later (indexing failed: ${String(e)}).`;
   }
 }
 
@@ -125,11 +137,7 @@ function createServer() {
     { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it. The local clone pulls it on the next session.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {
       const path = ideaPath(title);
-      const body = `# ${title}\n\n${content}\n`;
-      const r = await write({ kind: "write", path, content: body });
-      if (!r.ok) return text(r.message);
-      await indexNote(path, body);
-      return text(`Saved to ${path} ${r.message}`);
+      return text(await write({ kind: "write", path, content: `# ${title}\n\n${content}\n` }, `Saved: ${path}`));
     },
   );
 
@@ -138,10 +146,7 @@ function createServer() {
     { description: "Creates or overwrites a whole note in any folder (e.g. projetos/cafezinho.md). To change only part of it, prefer edit_note.", inputSchema: { path: z.string(), content: z.string() } },
     async ({ path, content }) => {
       const p = checkPath(path);
-      const r = await write({ kind: "write", path: p, content });
-      if (!r.ok) return text(r.message);
-      await indexNote(p, content);
-      return text(`Saved: ${p} ${r.message}`);
+      return text(await write({ kind: "write", path: p, content }, `Saved: ${p}`));
     },
   );
 
@@ -150,11 +155,7 @@ function createServer() {
     { description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
     async ({ path, old_text, new_text }) => {
       const p = checkPath(path);
-      const r = await write({ kind: "edit", path: p, oldText: old_text, newText: new_text });
-      if (!r.ok) return text(r.message);
-      const body = await readNote(E.ARTIFACTS, p);
-      if (body !== null) await indexNote(p, body);
-      return text(`Edited: ${p} ${r.message}`);
+      return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text }, `Edited: ${p}`));
     },
   );
 
@@ -163,10 +164,7 @@ function createServer() {
     { description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
     async ({ path }) => {
       const p = checkPath(path);
-      const r = await write({ kind: "delete", path: p });
-      if (!r.ok) return text(r.message);
-      await unindexNote(p);
-      return text(`Deleted: ${p} ${r.message}`);
+      return text(await write({ kind: "delete", path: p }, `Deleted: ${p}`));
     },
   );
 
@@ -175,12 +173,7 @@ function createServer() {
     { description: "Moves or renames a note in one commit (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
     async ({ from, to }) => {
       const a = checkPath(from), b = checkPath(to);
-      const r = await write({ kind: "move", from: a, to: b });
-      if (!r.ok) return text(r.message);
-      const body = await readNote(E.ARTIFACTS, b);
-      if (body !== null) await indexNote(b, body);
-      await unindexNote(a);
-      return text(`Moved: ${a} -> ${b} ${r.message}`);
+      return text(await write({ kind: "move", from: a, to: b }, `Moved: ${a} -> ${b}`));
     },
   );
 
@@ -190,8 +183,12 @@ function createServer() {
 const mcp = createMcpHandler(createServer);
 
 // Admin routes use `Authorization: Bearer <ADMIN_SECRET>`, never a URL (spec v2 §2).
-function isAdmin(request: Request, secret: string) {
-  return !!secret && request.headers.get("Authorization") === `Bearer ${secret}`;
+async function isAdmin(request: Request, secret: string) {
+  if (!secret) return false;
+  // compare digests in constant time, so response timing reveals nothing about the secret
+  const digest = async (s: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+  const [given, expected] = await Promise.all([digest(request.headers.get("Authorization") ?? ""), digest(`Bearer ${secret}`)]);
+  return crypto.subtle.timingSafeEqual(given, expected);
 }
 
 export default {
@@ -200,10 +197,10 @@ export default {
 
     // a 1-hour write token for the notes repo, for the Mac's sync hook (ADR 007)
     if (url.pathname === "/admin/artifacts-token" && request.method === "POST") {
-      if (!isAdmin(request, envArg.ADMIN_SECRET)) return new Response("Not found", { status: 404 });
+      if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
       using repo = await envArg.ARTIFACTS.get(envArg.NOTES_REPO);
       const [info, tok] = await Promise.all([repo.info(), repo.createToken("write", 3600)]);
-      return Response.json({ remote: info.remote, token: tok.plaintext.split("?")[0], expiresAt: tok.expiresAt });
+      return Response.json({ remote: info.remote, token: tok.plaintext.split("?")[0], expiresAt: tok.expiresAt }, { headers: { "Cache-Control": "no-store" } });
     }
 
     // secret URL: /<token>/mcp. Without the token it's a 404, as if nothing existed.
