@@ -2,7 +2,7 @@
 // owner proves who they are with "Sign in with GitHub". Only one GitHub account, by numeric id,
 // can complete it. A consent page comes first and shows where access will be sent, because any
 // client can register itself (confused deputy: MCP security best practices).
-import { AuthorizationError, type ConsentDescription, type OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import { AuthorizationError, CimdFetchError, authorizationErrorRedirect, type ConsentDescription, type OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 
 export type AuthEnv = {
   OAUTH_PROVIDER: OAuthHelpers;
@@ -11,8 +11,18 @@ export type AuthEnv = {
   OWNER_GITHUB_ID: string;
 };
 
-/** Where access may be sent: Claude (web, mobile), ChatGPT, and local apps such as Claude Code. */
-export const ALLOWED_REDIRECT_HOSTS = new Set(["claude.ai", "claude.com", "chatgpt.com", "chat.openai.com", "localhost", "127.0.0.1", "[::1]"]);
+/**
+ * Where access may be sent: the MCP connector callbacks of Claude and ChatGPT (exact paths, since
+ * other things on those hosts, like custom GPT actions, have callbacks too), and local apps such
+ * as Claude Code (any loopback port and path, per RFC 8252).
+ */
+export const ALLOWED_REDIRECT_PREFIXES = ["https://claude.ai/api/mcp/", "https://claude.com/api/mcp/", "https://chatgpt.com/connector_platform_oauth_redirect", "https://chat.openai.com/connector_platform_oauth_redirect"];
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+export function redirectAllowed(uri: string) {
+  const u = new URL(uri);
+  if (LOOPBACK.has(u.hostname)) return true;
+  return ALLOWED_REDIRECT_PREFIXES.some((p) => `${u.origin}${u.pathname}`.startsWith(p));
+}
 
 const escape = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const html = (body: string, headers: Headers, status = 200) => {
@@ -43,8 +53,10 @@ export async function authorize(req: Request, env: AuthEnv): Promise<Response> {
   try {
     if (req.method === "GET") {
       const request = await oauth.parseAuthRequest(req);
-      const host = new URL(request.redirectUri).hostname;
-      if (!ALLOWED_REDIRECT_HOSTS.has(host)) return plain(`This server only connects to Claude, ChatGPT or apps on this computer, not ${host}.`, 403);
+      if (!redirectAllowed(request.redirectUri)) {
+        console.warn(JSON.stringify({ auth: "redirect refused", redirectUri: request.redirectUri, clientId: request.clientId }));
+        return plain(`This server only connects to Claude, ChatGPT or apps on this computer, not ${new URL(request.redirectUri).host}.`, 403);
+      }
       const details = await oauth.describeConsent(request);
       const consent = await oauth.beginConsent(request);
       return html(consentPage(details, consent.handle), consent.headers);
@@ -76,6 +88,7 @@ export async function authorize(req: Request, env: AuthEnv): Promise<Response> {
   } catch (e) {
     if (e instanceof AuthorizationError && e.redirectTo) return Response.redirect(e.redirectTo, 302);
     if (e instanceof AuthorizationError) return plain(e.description ?? "Invalid authorization request");
+    if (e instanceof CimdFetchError) return plain("This app could not be verified (its metadata document couldn't be fetched).");
     throw e;
   }
 }
@@ -94,20 +107,26 @@ export async function callback(req: Request, env: AuthEnv, fetcher: typeof fetch
   const { request, data, headers } = started;
   const params = new URL(req.url).searchParams;
   const code = params.get("code");
-  if (params.get("error") || !code) return plain("GitHub sign-in was cancelled or failed.", 400);
+  if (params.get("error") || !code) {
+    // cancelled or failed at GitHub: tell the client, which shows its own message
+    headers.set("Location", authorizationErrorRedirect(request, "access_denied"));
+    return new Response(null, { status: 302, headers });
+  }
+  const json = async <T>(r: Response): Promise<T | null> => (r.ok ? ((await r.json().catch(() => null)) as T | null) : null);
 
   const token = await fetcher("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code, redirect_uri: new URL("/callback", req.url).toString(), code_verifier: data.verifier }),
-  }).then((r) => r.json() as Promise<{ access_token?: string; error?: string }>);
-  if (!token.access_token) return plain(`GitHub sign-in failed (${token.error ?? "no token"}).`, 400);
+  }).then((r) => json<{ access_token?: string; error?: string }>(r));
+  if (!token?.access_token) return plain(`GitHub sign-in failed (${token?.error ?? "no token"}). Start again from your app.`, 400);
 
   const user = await fetcher("https://api.github.com/user", {
     headers: { Authorization: `Bearer ${token.access_token}`, Accept: "application/vnd.github+json", "User-Agent": "second-brain-mcp" },
-  }).then((r) => (r.ok ? (r.json() as Promise<{ id: number; login: string }>) : null));
-  // the GitHub token is used only for this check and never stored
-  if (!user || String(user.id) !== env.OWNER_GITHUB_ID) {
+  }).then((r) => json<{ id: number; login: string }>(r));
+  // the GitHub token is used only for this check and never stored or logged
+  if (!user) return plain("Couldn't read your GitHub account. Start again from your app.", 502);
+  if (String(user.id) !== env.OWNER_GITHUB_ID) {
     console.warn(JSON.stringify({ auth: "refused", githubId: user?.id ?? null }));
     return plain("This second brain belongs to someone else.", 403);
   }

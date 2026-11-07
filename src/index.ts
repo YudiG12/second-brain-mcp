@@ -247,14 +247,25 @@ const app = {
     // OAuth grants: list (GET /admin/grants) and revoke one (DELETE /admin/grants/<id>) (ADR 011)
     if (url.pathname === "/admin/grants" || url.pathname.startsWith("/admin/grants/")) {
       if (!(await hasBearer(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
-      const id = url.pathname.slice("/admin/grants/".length);
+      let id = "";
+      try {
+        id = decodeURIComponent(url.pathname.slice("/admin/grants/".length));
+      } catch {
+        return new Response("Bad grant id", { status: 400 });
+      }
       if (request.method === "GET" && !id) {
-        const { items } = await envArg.OAUTH_PROVIDER.listUserGrants(envArg.OWNER_GITHUB_ID);
+        const items: any[] = [];
+        let cursor: string | undefined;
+        do {
+          const page: any = await envArg.OAUTH_PROVIDER.listUserGrants(envArg.OWNER_GITHUB_ID, cursor ? { cursor } : undefined);
+          items.push(...page.items);
+          cursor = page.cursor;
+        } while (cursor);
         return Response.json(items.map((g: any) => ({ id: g.id, clientId: g.clientId, scope: g.scope, createdAt: g.createdAt })), { headers: { "Cache-Control": "no-store" } });
       }
       if (request.method === "DELETE" && id) {
-        await envArg.OAUTH_PROVIDER.revokeGrant(decodeURIComponent(id), envArg.OWNER_GITHUB_ID);
-        return Response.json({ revoked: decodeURIComponent(id) });
+        await envArg.OAUTH_PROVIDER.revokeGrant(id, envArg.OWNER_GITHUB_ID);
+        return Response.json({ revoked: id });
       }
       return new Response("Method not allowed", { status: 405 });
     }
@@ -308,8 +319,9 @@ const oauth = new OAuthProvider<Env>({
   apiRoute: "/mcp",
   apiHandler: {
     async fetch(request, envArg, ctx) {
-      const auth = (ctx as any).auth as { clientId?: string; grantId?: string } | undefined;
-      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, grantId: auth?.grantId }));
+      // audit: which client made the call (never the token itself)
+      const auth = (ctx as any).auth as { clientId?: string; userId?: string } | undefined;
+      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, userId: auth?.userId }));
       return mcp(request, envArg, ctx);
     },
   },
@@ -329,7 +341,11 @@ export default {
   queue: app.queue,
   // daily: remove expired grants and tokens, and clients that registered again and left orphans
   async scheduled(_event: ScheduledController, envArg: Env) {
-    const result = await oauth.purgeExpiredData(envArg);
-    console.log(JSON.stringify({ oauthPurge: result }));
+    // resumable: each run continues the sweep where the last one stopped
+    const cursor = (await envArg.OAUTH_KV.get("purge:cursor")) ?? undefined;
+    const result = await oauth.purgeExpiredData(envArg, cursor ? { cursor } : undefined);
+    if (result.cursor) await envArg.OAUTH_KV.put("purge:cursor", result.cursor);
+    else await envArg.OAUTH_KV.delete("purge:cursor");
+    console.log(JSON.stringify({ oauthPurge: { ...result, cursor: undefined } }));
   },
 } satisfies ExportedHandler<Env, QueueMessage>;

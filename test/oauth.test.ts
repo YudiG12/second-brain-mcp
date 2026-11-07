@@ -25,12 +25,12 @@ const cookies = (res: Response) => res.headers.getSetCookie().map((c) => c.split
 /** Runs consent and the redirect to GitHub; returns what the callback needs. */
 async function startSignIn(redirectUri: string) {
   const clientId = await register(redirectUri);
-  const { challenge } = await pkce();
+  const { verifier, challenge } = await pkce();
   const page = await fetchWorker(authorizeUrl(clientId, redirectUri, challenge));
   const body = await page.text();
   const handle = body.match(/name="handle" value="([^"]+)"/)![1];
   const approve = await fetchWorker("/authorize", { method: "POST", headers: { Cookie: cookies(page), "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ handle, decision: "approve" }) });
-  return { page, body, approve };
+  return { page, body, approve, clientId, verifier };
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -77,6 +77,22 @@ describe("grants admin routes", () => {
 });
 
 describe("consent and sign-in", () => {
+  it.each(["https://claude.ai/some/other/callback", "https://chatgpt.com/aip/g-attacker/oauth/callback"])(
+    "refuses other callbacks on the allowed hosts (%s)",
+    async (uri) => {
+      const clientId = await register(uri);
+      const { challenge } = await pkce();
+      expect((await fetchWorker(authorizeUrl(clientId, uri, challenge))).status).toBe(403);
+    },
+  );
+
+  it("accepts any loopback port for local apps like Claude Code", async () => {
+    const uri = "http://localhost:53682/callback";
+    const clientId = await register(uri);
+    const { challenge } = await pkce();
+    expect((await fetchWorker(authorizeUrl(clientId, uri, challenge))).status).toBe(200);
+  });
+
   it("refuses to send access anywhere but Claude, ChatGPT or this computer", async () => {
     const clientId = await register("https://evil.example/cb");
     const { challenge } = await pkce();
@@ -111,19 +127,55 @@ describe("consent and sign-in", () => {
     });
 
   async function finish(id: number) {
-    const { approve } = await startSignIn("https://claude.ai/api/mcp/auth_callback");
-    const state = new URL(approve.headers.get("Location")!).searchParams.get("state")!;
+    const started = await startSignIn("https://claude.ai/api/mcp/auth_callback");
+    const state = new URL(started.approve.headers.get("Location")!).searchParams.get("state")!;
     githubAs(id);
-    return fetchWorker(`/callback?code=gh-code&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookies(approve) } });
+    const res = await fetchWorker(`/callback?code=gh-code&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookies(started.approve) } });
+    vi.restoreAllMocks();
+    return { res, ...started };
   }
+  const listGrants = async () => (await (await fetchWorker("/admin/grants", { headers: { Authorization: "Bearer test-admin" } })).json()) as { id: string; clientId: string }[];
 
   it("refuses any GitHub account but the owner's, without creating a grant", async () => {
-    const res = await finish(7);
+    const { res, clientId } = await finish(7);
     expect(res.status).toBe(403);
+    expect((await listGrants()).filter((g) => g.clientId === clientId)).toEqual([]);
+  });
+
+  it("sends the client an access_denied when GitHub sign-in is cancelled", async () => {
+    const { approve } = await startSignIn("https://claude.ai/api/mcp/auth_callback");
+    const state = new URL(approve.headers.get("Location")!).searchParams.get("state")!;
+    const res = await fetchWorker(`/callback?error=access_denied&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookies(approve) } });
+    expect(res.status).toBe(302);
+    expect(new URL(res.headers.get("Location")!).searchParams.get("error")).toBe("access_denied");
+  });
+
+  it("end to end: code, token, an authenticated MCP call, then revoked means 401", async () => {
+    const { res, clientId, verifier } = await finish(42);
+    const code = new URL(res.headers.get("Location")!).searchParams.get("code")!;
+    const tok = await fetchWorker("/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "authorization_code", code, client_id: clientId, redirect_uri: "https://claude.ai/api/mcp/auth_callback", code_verifier: verifier, resource: `${BASE}/mcp` }),
+    });
+    expect(tok.status).toBe(200);
+    const { access_token } = (await tok.json()) as { access_token: string };
+    const mcpCall = () =>
+      fetchWorker("/mcp", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+      });
+    const listed = await mcpCall();
+    expect(listed.status).toBe(200);
+    expect(await listed.text()).toContain("semantic_search");
+    const grant = (await listGrants()).find((g) => g.clientId === clientId)!;
+    await fetchWorker(`/admin/grants/${encodeURIComponent(grant.id)}`, { method: "DELETE", headers: { Authorization: "Bearer test-admin" } });
+    expect((await mcpCall()).status).toBe(401);
   });
 
   it("completes for the owner and redirects back to the client with a code", async () => {
-    const res = await finish(42);
+    const { res } = await finish(42);
     expect(res.status).toBe(302);
     const back = new URL(res.headers.get("Location")!);
     expect(back.origin).toBe("https://claude.ai");
