@@ -28,6 +28,27 @@ check "NOTES_REPO, VECTORIZE_INDEX and the Artifacts namespace" '[ "$(get NOTES_
 check "an unknown key fails" '! get nope >/dev/null && grep -q nope "$T/err"'
 sed -i.bak 's#https://my-brain.alice.workers.dev#https://brain.example.com#' "$T/w.jsonc"
 check "a custom domain has no workers.dev subdomain: fails with a message" '! get subdomain >/dev/null && grep -qi "workers.dev" "$T/err"'
+cat > "$T/w.jsonc" <<'J'
+﻿{
+  "name": "my-brain",
+  "account_id": "abc123",
+  "vars": { "PUBLIC_URL": "https://my-brain.alice.workers.dev", "CF_ACCOUNT_ID": "abc123", "NOTE": "a \\"quoted /* not a comment */ ,}\\" text", "subdomain": "shadow" },
+  "d1_databases": [{ "database_name": "db1" }],
+  "queues": { "producers": [{ "queue": "q1" }], "consumers": [{ "queue": "q1", "dead_letter_queue": "q1-dlq" }] },
+}
+J
+echo "edge cases"
+check "a BOM and escaped quotes, /* and ,} inside strings" '[ "$(get NOTE)" = "a \"quoted /* not a comment */ ,}\" text" ]'
+check "derived keys aren't shadowed by vars" '[ "$(get subdomain)" = alice ]'
+check "a prototype key is not a setting" '! get constructor >/dev/null'
+check "the D1 name, the queue and the dead-letter queue" '[ "$(get d1) $(get queue) $(get dlq)" = "db1 q1 q1-dlq" ]'
+check "check passes when name, PUBLIC_URL and CF_ACCOUNT_ID agree" 'get check >/dev/null'
+sed -i.bak 's#"name": "my-brain"#"name": "other"#' "$T/w.jsonc"
+check "check fails when the Worker name differs from PUBLIC_URL" '! get check >/dev/null && grep -q "other" "$T/err"'
+sed -i.bak 's#"name": "other"#"name": "my-brain"#; s#"CF_ACCOUNT_ID": "abc123"#"CF_ACCOUNT_ID": "zzz"#' "$T/w.jsonc"
+check "check fails when CF_ACCOUNT_ID differs from account_id" '! get check >/dev/null && grep -q "CF_ACCOUNT_ID" "$T/err"'
+sed -i.bak 's#https://my-brain.alice.workers.dev#not a url#' "$T/w.jsonc"
+check "an invalid PUBLIC_URL fails with a message, not a stack trace" '! get subdomain >/dev/null && grep -q "^config:" "$T/err" && ! grep -q "    at " "$T/err"'
 echo "the repo's own config"
 check "parses" 'node "$CFG" PUBLIC_URL >/dev/null'
 

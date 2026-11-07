@@ -5,6 +5,7 @@ set -uo pipefail
 HOOK="$(cd "$(dirname "$0")/../.." && pwd)/clients/claude-code/notes-sync.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export NOTES_SYNC_NO_AUTH=1 HOME="$T/home" GIT_CONFIG_GLOBAL="$T/gitconfig"
+unset XDG_CONFIG_HOME SECOND_BRAIN_URL # never read the real ~/.config/second-brain/hook.env
 mkdir -p "$HOME/.claude"
 git config --global user.email t@t; git config --global user.name t; git config --global init.defaultBranch main
 pass=0; fail=0
@@ -279,6 +280,33 @@ rm -rf "$cfg"
 printf 'needs auth\n' > "$T/mac/ideias/auth.md"
 ( unset NOTES_SYNC_NO_AUTH SECOND_BRAIN_URL; bash "$HOOK" push 2>"$T/err" ); code=$?
 check "without SECOND_BRAIN_URL a sync that needs a token fails loudly" '[ $code = 1 ] && grep -q "SECOND_BRAIN_URL" "$T/err"'
+
+echo "configuration file formats"
+cfg="$HOME/.config/second-brain"; mkdir -p "$cfg"
+setup
+probe() { ( unset NOTES_DIR; bash "$HOOK" pull 2>"$T/err" ); }
+printf 'NOTES_DIR=%s\r\n' "$T/mac" > "$cfg/hook.env"; probe; code=$?
+check "CRLF line endings" '[ $code = 0 ]'
+printf 'export NOTES_DIR=%s\n' "$T/mac" > "$cfg/hook.env"; probe; code=$?
+check "an export prefix" '[ $code = 0 ]'
+printf 'NOTES_DIR="%s"   \n' "$T/mac" > "$cfg/hook.env"; probe; code=$?
+check "double quotes and trailing spaces" '[ $code = 0 ]'
+printf 'NOTES_DIR=%s # my clone\n' "$T/mac" > "$cfg/hook.env"; probe; code=$?
+check "a trailing # comment" '[ $code = 0 ]'
+mkdir -p "$HOME/my notes"; git clone -q "$T/remote.git" "$HOME/my notes"
+printf 'NOTES_DIR=$HOME/my notes\n' > "$cfg/hook.env"; probe; code=$?
+check "\$HOME and a space in the path" '[ $code = 0 ]'
+printf 'NOTES_DIR=${HOME}/my notes\n' > "$cfg/hook.env"; probe; code=$?
+check "\${HOME}" '[ $code = 0 ]'
+mkdir -p "$T/xdg/second-brain"; printf 'NOTES_DIR=%s\n' "$T/mac" > "$T/xdg/second-brain/hook.env"; rm -f "$cfg/hook.env"
+( unset NOTES_DIR; XDG_CONFIG_HOME="$T/xdg" bash "$HOOK" pull 2>/dev/null ); code=$?
+check "XDG_CONFIG_HOME is honored" '[ $code = 0 ]'
+rm -rf "$T/xdg"
+printf 'NOTES_DIR=%s\nSECOND_BRAIN_URL=http://127.0.0.1:9/a=b\n' "$T/mac" > "$cfg/hook.env"
+printf 'needs a token\n' > "$T/mac/ideias/tok.md"
+( unset NOTES_DIR NOTES_SYNC_NO_AUTH; PATH="$T/fakebin:$PATH"; mkdir -p "$T/fakebin"; printf '#!/bin/sh\nexit 1\n' > "$T/fakebin/security"; chmod +x "$T/fakebin/security"; bash "$HOOK" push 2>"$T/err" ); code=$?
+check "SECOND_BRAIN_URL from the file, with = in the value" '[ $code = 1 ] && ! grep -q "SECOND_BRAIN_URL" "$T/err"'
+rm -rf "$cfg" "$T/fakebin"
 
 echo
 echo "$pass passed, $fail failed"
