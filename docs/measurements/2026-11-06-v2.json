@@ -2,7 +2,7 @@
   "server": "https://second-brain-mcp.yudiganeko.workers.dev",
   "date": "2026-11-07T00:46:48Z",
   "runs": 10,
-  "note": "Seconds, measured from the Mac, including network. Nearest-rank percentiles, indicative at n=10. Searches are warm. v2 in production after #53 (Artifacts + Durable Object writes, Queue indexing, hybrid search). The tools enqueue indexing instead of embedding inline, which is part of why writes got faster.",
+  "note": "Seconds, measured from the Mac, including network. Nearest-rank percentiles, indicative at n=10. Searches are warm. v2 in production after #53 (Artifacts + Durable Object writes, Queue indexing, hybrid search). Writes changed two things at once (Durable Object/Artifacts instead of the GitHub API, and enqueued instead of inline embedding); the speedup is not attributed between them. Cold vs warm is not controlled: the 5.2 s max is the first write.",
   "notes_in_repo": 28,
   "write_note": {
     "n": 10,
@@ -40,7 +40,7 @@
       97.0
     ],
     "never_visible": 0,
-    "resolution_s": "about \u00b14.5 (3 s sleep + one query per poll)",
+    "resolution_s": "about ±4.5 (3 s sleep + one query per poll)",
     "gave_up_after_s": 600.0
   },
   "write_to_keyword_searchable": {
@@ -97,5 +97,75 @@
       1.39,
       1.42
     ]
+  },
+  "write_to_keyword_searchable_fine": {
+    "samples": [
+      9.8,
+      11.6,
+      12.1,
+      13.5,
+      14.3
+    ],
+    "p50": 12.1,
+    "note": "re-measured polling search_notes alone every ~2 s; the 15 s above is the main run's ~6 s polling grid"
+  },
+  "semantic_floor_evidence": {
+    "top3_scores": {
+      "real": {
+        "o que eu decidi sobre a Railblocks e o Lorenzo": [
+          0.44,
+          0.38,
+          0.37
+        ],
+        "qual o plano para o canal do YouTube": [
+          0.59,
+          0.5,
+          0.49
+        ],
+        "quanto custa o apartamento em São Paulo": [
+          0.64,
+          0.51,
+          0.43
+        ],
+        "como funciona o sistema do Shinwa": [
+          0.56,
+          0.54,
+          0.52
+        ],
+        "o que é o Cafezinho": [
+          0.53,
+          0.44,
+          0.36
+        ]
+      },
+      "no_match": {
+        "receita de bolo de cenoura com cobertura de chocolate": [
+          0.34,
+          0.33,
+          0.31
+        ],
+        "quem ganhou a copa do mundo de 1970": [
+          0.24,
+          0.24,
+          0.24
+        ],
+        "como trocar o pneu de uma bicicleta": [
+          0.48,
+          0.4,
+          0.39
+        ],
+        "previsão do tempo para amanhã em Tóquio": [
+          0.41,
+          0.4,
+          0.4
+        ],
+        "regras do xadrez para o roque": [
+          0.41,
+          0.4,
+          0.38
+        ]
+      }
+    },
+    "conclusion": "real and unrelated queries overlap (no-match up to 0.48, a real best at 0.44): no floor separates them with bge-m3"
   }
 }
