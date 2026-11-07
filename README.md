@@ -6,6 +6,8 @@
 
 <p align="center"><img src="docs/assets/hld.png" alt="High-level design: the Mac and any other client talk MCP to a Worker on Cloudflare, which keeps the notes in Artifacts and embeds them with Workers AI into Vectorize" width="100%"></p>
 
+<p align="center"><sub>A simplified view. Every component, with the decision behind it: <a href="docs/architecture/README.md">low-level design</a>.</sub></p>
+
 ## Deploy your own
 
 Each deployment serves one person: your notes, your Cloudflare account, and only your GitHub account can sign in. You need a Cloudflare account on the Workers Paid plan, Node 24 or later, and a GitHub account.
