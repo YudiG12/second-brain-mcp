@@ -32,7 +32,7 @@ cat > "$T/w.jsonc" <<'J'
 ﻿{
   "name": "my-brain",
   "account_id": "abc123",
-  "vars": { "PUBLIC_URL": "https://my-brain.alice.workers.dev", "CF_ACCOUNT_ID": "abc123", "NOTE": "a \\"quoted /* not a comment */ ,}\\" text", "subdomain": "shadow" },
+  "vars": { "PUBLIC_URL": "https://my-brain.alice.workers.dev", "CF_ACCOUNT_ID": "abc123", "NOTE": "a \"quoted /* not a comment */ ,}\" text", "subdomain": "shadow" },
   "d1_databases": [{ "database_name": "db1" }],
   "queues": { "producers": [{ "queue": "q1" }], "consumers": [{ "queue": "q1", "dead_letter_queue": "q1-dlq" }] },
 }

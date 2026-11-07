@@ -20,7 +20,7 @@ The script is macOS-only: it uses the Keychain (`security`) and BSD `stat -f`.
 
 1. Store the hook secret in the Keychain: `scripts/secrets.sh hook` creates one and saves it to the Worker and the Keychain (service `second-brain-hook`).
 2. Clone the notes repo anywhere.
-3. Tell the hook where things are, in `~/.config/second-brain/hook.env` (plain `KEY=value` lines; the file is read as text, never run) or in the environment, which wins:
+3. Tell the hook where things are, in `~/.config/second-brain/hook.env` (or `$XDG_CONFIG_HOME/second-brain/hook.env`) or in the environment, which wins. The file is read as text, never run: `KEY=value` lines, optionally with `export`, quotes or a trailing `# comment`; only a leading `~`, `$HOME` or `${HOME}` is expanded.
    ```sh
    mkdir -p ~/.config/second-brain
    cat > ~/.config/second-brain/hook.env <<'EOF'

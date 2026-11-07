@@ -19,11 +19,20 @@
 # from ~/.config/second-brain/hook.env as KEY=value lines. The file is read as text, never run.
 LOG="$HOME/.claude/notes-sync.log"
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/second-brain/hook.env"
-conf() { # last value of KEY in the config file, quotes stripped, a leading ~ expanded
+conf() { # last value of KEY in the config file: optional "export", CRLF, quotes, trailing spaces and
+  # " # comment" removed; a leading ~, $HOME or ${HOME} expanded. Nothing else is expanded or run.
   [ -f "$CONF" ] || return 0
-  local v; v=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" | tail -1)
-  v=${v%\"}; v=${v#\"}; v=${v%\'}; v=${v#\'}
-  case "$v" in "~"|"~/"*) v="$HOME${v#\~}";; esac
+  local v; v=$(tr -d '\r' < "$CONF" | sed -En "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=[[:space:]]*//p" | tail -1)
+  case "$v" in
+    \"*\"*) v=${v#\"}; v=${v%%\"*};;
+    \'*\'*) v=${v#\'}; v=${v%%\'*};;
+    *) v=${v%%[[:space:]]#*}; v=${v%"${v##*[![:space:]]}"};;
+  esac
+  case "$v" in
+    "~"|"~/"*) v="$HOME${v#\~}";;
+    '$HOME'|'$HOME/'*) v="$HOME${v#\$HOME}";;
+    '${HOME}'|'${HOME}/'*) v="$HOME${v#\$\{HOME\}}";;
+  esac
   printf '%s' "$v"
 }
 DIR="${NOTES_DIR:-$(conf NOTES_DIR)}"

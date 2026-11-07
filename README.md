@@ -13,9 +13,9 @@
 Each deployment serves one person: your notes, your Cloudflare account, and only your GitHub account can sign in. You need a Cloudflare account on the Workers Paid plan, Node 24 or later, and a GitHub account.
 
 1. **Fork and install.** `npm ci`, then `npx wrangler login`.
-2. **Point it at your account.** Everything owner-specific lives in one file, `wrangler.jsonc`: `account_id`, and in `vars` `PUBLIC_URL` (`https://<worker>.<your-subdomain>.workers.dev`), `CF_ACCOUNT_ID` and `OWNER_GITHUB_ID` (your numeric GitHub id: `gh api user --jq .id`). The scripts and CI read it from there ([`scripts/config.mjs`](scripts/config.mjs)). Then `npm run types`.
+2. **Point it at your account.** Everything that changes per deployment is in `wrangler.jsonc`: `name`, `account_id`, and in `vars` `PUBLIC_URL` (`https://<name>.<your-subdomain>.workers.dev`), `CF_ACCOUNT_ID` (same as `account_id`) and `OWNER_GITHUB_ID` (your numeric GitHub id: `gh api user --jq .id`). The scripts and CI read it from there ([`scripts/config.mjs`](scripts/config.mjs); `node scripts/config.mjs check` validates it). Then `npm run types`.
 3. **Create a GitHub OAuth app** (Settings → Developer settings → OAuth Apps) with the callback `<PUBLIC_URL>/callback`. Put its client id in `GITHUB_CLIENT_ID`.
-4. **Create the resources.** `scripts/setup.sh` creates the Vectorize index, the Artifacts repository, the D1 database, the queues and the push subscription. It is safe to run again; copy the D1 id it prints into `wrangler.jsonc`.
+4. **Create the resources.** `scripts/setup.sh` creates the Vectorize index, the Artifacts repository, the D1 database, the queues and the push subscription. It is safe to run again: when it creates the D1 database or the KV namespace it stops and asks you to copy the printed id into `wrangler.jsonc`, then run it again.
 5. **Add your notes.** Push your Markdown notes (at least one commit) to the Artifacts repository before the first deploy; the [setup guide](docs/setup.md) has the token command.
 6. **Deploy and set secrets.** `npx wrangler deploy`, then `scripts/secrets.sh github-oauth` and `scripts/secrets.sh admin`.
 7. **Build the index.** `POST <PUBLIC_URL>/admin/reconcile?mode=rebuild` with `Authorization: Bearer <ADMIN_SECRET>`.
