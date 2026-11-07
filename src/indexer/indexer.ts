@@ -72,12 +72,14 @@ async function indexPath(msg: IndexMessage, deps: Deps): Promise<Outcome> {
       await deps.index.upsert(parts.map((text, seq) => ({ id: `${h}-${seq}`, values: values[seq], metadata: { path, seq, text: text.slice(0, 1500) } })));
     }
     if (parts.length < MAX_CHUNKS) await deps.index.deleteByIds(await idsFrom(path, parts.length)); // leftovers from a longer version
+    await deps.keywords.replace(path, parts);
     if ((await currentSha(path, head!, note.sha, deps)) !== note.sha) return requeue(msg, deps);
     await deps.manifest.put({ path, sha: note.sha, chunks: parts.length });
     return { kind: "indexed", path, chunks: parts.length };
   }
 
   await deps.index.deleteByIds(await idsFrom(path, 0)); // the whole id range, whatever the manifest says
+  await deps.keywords.remove(path);
   await deps.manifest.remove(path);
   if ((await currentSha(path, head, null, deps)) !== null) return requeue(msg, deps);
   return { kind: "deleted", path };

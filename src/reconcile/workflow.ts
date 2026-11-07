@@ -31,6 +31,7 @@ export class Reconcile extends WorkflowEntrypoint<Env, { mode?: Mode }> {
       },
       index: {
         manifest: async () => (await env.DB.prepare("SELECT path, sha FROM manifest").all<{ path: string; sha: string }>()).results,
+        keywordPaths: async () => (await env.DB.prepare("SELECT DISTINCT path FROM chunks_fts").all<{ path: string }>()).results.map((r) => r.path),
         vectorPathHashes: () => vectorPathHashes(env.CF_ACCOUNT_ID, env.VECTORIZE_INDEX, env.CF_API_TOKEN),
       },
       enqueue: async (ms) => {

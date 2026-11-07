@@ -21,6 +21,8 @@ export interface ReconcileSource {
 export interface ReconcileIndex {
   /** The manifest rows: what the index says it holds. */
   manifest(): Promise<NoteSha[]>;
+  /** Paths with rows in the keyword index (chunks_fts). */
+  keywordPaths(): Promise<string[]>;
   /** Path hashes that have vectors (rebuild only). null when listing isn't available. */
   vectorPathHashes(): Promise<string[] | null>;
 }

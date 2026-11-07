@@ -17,8 +17,9 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
     return { commit, notes };
   });
 
-  const { manifest, vectorHashes } = await step.do("snapshot index", async () => ({
+  const { manifest, keywordPaths, vectorHashes } = await step.do("snapshot index", async () => ({
     manifest: await deps.index.manifest(),
+    keywordPaths: await deps.index.keywordPaths(),
     vectorHashes: mode === "rebuild" ? await deps.index.vectorPathHashes() : null,
   }));
 
@@ -29,7 +30,7 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
   const inSource = new Set(notes.map((n) => n.path));
   const fresh = notes.filter((n) => !indexed.has(n.path)).map((n) => n.path);
   const changed = notes.filter((n) => indexed.has(n.path) && indexed.get(n.path) !== n.sha).map((n) => n.path);
-  const orphans = manifest.filter((r) => !inSource.has(r.path)).map((r) => r.path);
+  const orphans = [...new Set([...manifest.map((r) => r.path), ...keywordPaths])].filter((p) => !inSource.has(p)).sort();
 
   let messages: (IndexMessage | DropMessage)[];
   let vectorOrphans: number | null = null;
