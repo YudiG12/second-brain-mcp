@@ -1,5 +1,5 @@
 """Writes the README images' sources: banner.html and hld.html, each with a light and a dark theme
-(?theme=dark). Render each to PNG at 2x (any headless browser); README picks the theme with <picture>.
+(?theme=dark). Render each to PNG at 2x (any headless browser); the README uses the light ones.
 Style: the author's brand book (navy + sand, 1px borders, 4px corners, Onest / Oxanium)."""
 import json, os
 D = os.path.dirname(os.path.abspath(__file__))

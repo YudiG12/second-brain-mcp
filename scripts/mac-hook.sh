@@ -14,11 +14,17 @@ ask() { local a; read -r -p "  $1${2:+ [$2]}: " a </dev/tty; printf '%s' "${a:-$
 URL=$(cfg PUBLIC_URL)
 DIR=$(ask "Where to keep the notes clone" "~/notes"); DIR=${DIR/#\~/$HOME}
 
-security find-generic-password -s second-brain-hook -w >/dev/null 2>&1 || bash scripts/secrets.sh hook >/dev/null
-ok "hook secret in the Keychain"
+if security find-generic-password -s second-brain-hook -w >/dev/null 2>&1 && wr secret list 2>/dev/null | grep -q HOOK_SECRET; then :
+else bash scripts/secrets.sh hook >/dev/null; fi
+ok "hook secret in the Keychain and on the Worker"
 
-if [ ! -d "$DIR/.git" ]; then
-  REMOTE=$(wr artifacts repos get "$(cfg NOTES_REPO)" --namespace "$(cfg namespace)" --json | json '(j.result||j).remote')
+REMOTE=$(wr artifacts repos get "$(cfg NOTES_REPO)" --namespace "$(cfg namespace)" --json | json '(j.result||j).remote')
+if [ -d "$DIR/.git" ]; then
+  # a clone made earlier (for example the folder deploy-your-own pushed): point it at the repo
+  git -C "$DIR" remote get-url origin >/dev/null 2>&1 || git -C "$DIR" remote add origin "$REMOTE"
+  [ "$(git -C "$DIR" remote get-url origin)" = "$REMOTE" ] || { echo "  $DIR has another origin; pick a different folder"; exit 1; }
+  git -C "$DIR" config branch.main.remote origin; git -C "$DIR" config branch.main.merge refs/heads/main
+else
   TOKEN=$(wr artifacts repos issue-token "$(cfg NOTES_REPO)" --namespace "$(cfg namespace)" --scope write --ttl 600 --json | json j.plaintext)
   GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $TOKEN" git clone -q "$REMOTE" "$DIR"
 fi
@@ -29,16 +35,6 @@ printf 'NOTES_DIR=%s\nSECOND_BRAIN_URL=%s\n' "$DIR" "$URL" > "${XDG_CONFIG_HOME:
 ln -sf "$PWD/clients/claude-code/notes-sync.sh" ~/.claude/hooks/notes-sync.sh
 ok "hook linked, configured for $URL"
 
-# adds the three hooks to ~/.claude/settings.json unless they're there (keeps everything else)
-node -e '
-const fs = require("fs"), p = process.env.HOME + "/.claude/settings.json";
-const s = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
-const add = JSON.parse(fs.readFileSync("clients/claude-code/settings.hooks.json", "utf8")).hooks;
-s.hooks ??= {};
-for (const [ev, list] of Object.entries(add)) {
-  s.hooks[ev] ??= [];
-  if (!JSON.stringify(s.hooks[ev]).includes("notes-sync.sh")) s.hooks[ev].push(...list);
-}
-fs.writeFileSync(p, JSON.stringify(s, null, 2) + "\n");'
+node scripts/merge-hooks.mjs # keeps every other setting, backs up to settings.json.bak
 ok "hooks in ~/.claude/settings.json"
 bash ~/.claude/hooks/notes-sync.sh pull && ok "first sync done"
