@@ -12,9 +12,11 @@ import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
 import { checkPath, ideaPath, withSuffix } from "./lib/notes";
 import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 
-// semantic results below this cosine similarity are dropped, so a query with no real match can
-// return nothing (ADR 012; tune against real queries)
-const SEMANTIC_FLOOR = 0.45;
+// Semantic results below this cosine similarity are dropped, so a query with no real match can
+// return nothing (ADR 012). Tuned on real notes: bge-m3 scores full-sentence questions low, e.g.
+// "o que eu decidi sobre a Railblocks e o Lorenzo" put the right note at 0.44 and loosely related
+// ones at 0.32-0.38, so the first guess (0.45) cut everything. 0.30 keeps those, drops noise below.
+const SEMANTIC_FLOOR = 0.3;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";

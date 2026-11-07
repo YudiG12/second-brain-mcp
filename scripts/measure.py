@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Measures the live MCP server: write latency, write-to-searchable latency and search latency.
 
-Usage: scripts/measure.py [runs]   (default 10; needs MCP_TOKEN in .dev.vars)
+Usage: scripts/measure.py [runs]   (default 10)
+Auth: ACCESS_TOKEN (an OAuth access token, sent as a Bearer header to /mcp) if set; otherwise the
+legacy token URL with MCP_TOKEN from .dev.vars (removed in #52).
 Writes notes under _bench/ and deletes them at the end. Prints a JSON summary.
 DNS goes through Cloudflare's DNS-over-HTTPS, so a stale local resolver doesn't matter.
 """
@@ -11,13 +13,14 @@ URL = "https://second-brain-mcp.yudiganeko.workers.dev"
 RUNS = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 POLL_EVERY, POLL_MAX = 3.0, 600.0
 os.chdir(os.path.join(os.path.dirname(__file__), ".."))
-TOKEN = next(l.split("=", 1)[1].strip() for l in open(".dev.vars") if l.startswith("MCP_TOKEN="))
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+TOKEN = None if ACCESS_TOKEN else next(l.split("=", 1)[1].strip() for l in open(".dev.vars") if l.startswith("MCP_TOKEN="))
 
 
 def call(tool, args):
     """Calls one MCP tool; returns (seconds, text). The token goes through curl's stdin config, not argv."""
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
-    cfg = f'url = "{URL}/{TOKEN}/mcp"\n'
+    cfg = f'url = "{URL}/mcp"\nheader = "Authorization: Bearer {ACCESS_TOKEN}"\n' if ACCESS_TOKEN else f'url = "{URL}/{TOKEN}/mcp"\n'
     out = subprocess.run(
         ["curl", "-s", "--doh-url", "https://1.1.1.1/dns-query", "-m", "60", "-X", "POST", "--config", "-",
          "-H", "Content-Type: application/json", "-H", "Accept: application/json, text/event-stream",
@@ -40,28 +43,31 @@ def stats(xs, digits=2):
     return {"n": len(s), "p50": pct(0.5), "p90": pct(0.9), "max": round(s[-1], digits), "samples": [round(x, digits) for x in xs]}
 
 
-writes, visible, searches_kw, searches_sem = [], [], [], []
+writes, visible, visible_kw, searches_kw, searches_sem = [], [], [], [], []
 note_count = len(call("list_notes", {})[1].splitlines())
 for i in range(RUNS):
     tag = uuid.uuid4().hex[:12]
+    word = f"zq{tag}"  # a word no other note has, for the keyword index
     path = f"_bench/{tag}.md"
-    text = f"Benchmark note {tag}. Measuring how long the second brain takes to make a new note searchable."
+    text = f"Benchmark note {word}. Measuring how long the second brain takes to make a new note searchable."
     try:
         t, _ = call("write_note", {"path": path, "content": text})  # cold or warm is not controlled
         writes.append(t)
         start = time.monotonic()
-        while time.monotonic() - start < POLL_MAX:
-            _, found = call("semantic_search", {"query": text, "topK": 10})
-            if path in found:
-                visible.append(time.monotonic() - start + t)
-                break
-            time.sleep(POLL_EVERY)
-        else:
-            visible.append(None)
+        sem_at = kw_at = None
+        while time.monotonic() - start < POLL_MAX and (sem_at is None or kw_at is None):
+            if kw_at is None and path in call("search_notes", {"query": word})[1]:
+                kw_at = time.monotonic() - start + t
+            if sem_at is None and path in call("semantic_search", {"query": text, "topK": 10})[1]:
+                sem_at = time.monotonic() - start + t
+            if sem_at is None or kw_at is None:
+                time.sleep(POLL_EVERY)
+        visible.append(sem_at)
+        visible_kw.append(kw_at)
         # warm: these run right after the polling loop
         searches_kw.append(call("search_notes", {"query": "railblocks"})[0])
         searches_sem.append(call("semantic_search", {"query": "decisões de carreira", "topK": 5})[0])
-        print(f"run {i + 1}/{RUNS}: write {t:.2f}s, searchable after {visible[-1]}s", file=sys.stderr)
+        print(f"run {i + 1}/{RUNS}: write {t:.2f}s, keyword after {kw_at}s, semantic after {sem_at}s", file=sys.stderr)
     finally:
         # delete every run's note before the next one, so runs don't compete in search and the note count stays fixed
         try:
@@ -76,6 +82,7 @@ print(json.dumps({
     "notes_in_repo": note_count,
     "write_note": stats(writes),
     "write_to_searchable": {**stats(ok, 0), "never_visible": visible.count(None), "resolution_s": "about ±4.5 (3 s sleep + one query per poll)", "gave_up_after_s": POLL_MAX} if ok else {"never_visible": RUNS},
+    "write_to_keyword_searchable": {**stats([v for v in visible_kw if v is not None], 1), "never_visible": visible_kw.count(None)} if any(v is not None for v in visible_kw) else {"never_visible": RUNS},
     "search_notes": stats(searches_kw),
     "semantic_search": stats(searches_sem),
 }, indent=2))

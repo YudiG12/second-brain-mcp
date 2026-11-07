@@ -1,0 +1,101 @@
+{
+  "server": "https://second-brain-mcp.yudiganeko.workers.dev",
+  "date": "2026-11-07T00:46:48Z",
+  "runs": 10,
+  "note": "Seconds, measured from the Mac, including network. Nearest-rank percentiles, indicative at n=10. Searches are warm. v2 in production after #53 (Artifacts + Durable Object writes, Queue indexing, hybrid search). The tools enqueue indexing instead of embedding inline, which is part of why writes got faster.",
+  "notes_in_repo": 28,
+  "write_note": {
+    "n": 10,
+    "p50": 2.09,
+    "p90": 2.15,
+    "max": 5.21,
+    "samples": [
+      5.21,
+      2.08,
+      2.09,
+      2.08,
+      2.13,
+      2.13,
+      2.11,
+      2.05,
+      2.05,
+      2.15
+    ]
+  },
+  "write_to_searchable": {
+    "n": 10,
+    "p50": 53.0,
+    "p90": 71.0,
+    "max": 97.0,
+    "samples": [
+      54.0,
+      36.0,
+      44.0,
+      40.0,
+      44.0,
+      53.0,
+      66.0,
+      58.0,
+      71.0,
+      97.0
+    ],
+    "never_visible": 0,
+    "resolution_s": "about \u00b14.5 (3 s sleep + one query per poll)",
+    "gave_up_after_s": 600.0
+  },
+  "write_to_keyword_searchable": {
+    "n": 10,
+    "p50": 15.4,
+    "p90": 15.7,
+    "max": 20.0,
+    "samples": [
+      20.0,
+      15.7,
+      15.5,
+      15.4,
+      15.6,
+      15.4,
+      15.5,
+      15.3,
+      15.3,
+      13.5
+    ],
+    "never_visible": 0
+  },
+  "search_notes": {
+    "n": 10,
+    "p50": 1.46,
+    "p90": 1.53,
+    "max": 1.64,
+    "samples": [
+      1.49,
+      1.46,
+      1.43,
+      1.46,
+      1.64,
+      1.52,
+      1.53,
+      1.41,
+      1.42,
+      1.42
+    ]
+  },
+  "semantic_search": {
+    "n": 10,
+    "p50": 1.41,
+    "p90": 1.46,
+    "max": 1.59,
+    "samples": [
+      1.46,
+      1.42,
+      1.38,
+      1.39,
+      1.44,
+      1.38,
+      1.59,
+      1.41,
+      1.39,
+      1.42
+    ]
+  }
+}
