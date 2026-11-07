@@ -9,7 +9,7 @@ v2 serves one person. This note looks at what changes if it served a team, or ma
 
 ## What already scales
 
-- **The unit of work is the repository.** A Git commit covers the whole repository, so writes are serialized per repository by one Durable Object ([ADR 008](../adr/008-one-durable-object-per-repository.md)). Different repositories never contend: one repository per team (or per person) shards writes for free, and each Durable Object lives near its users.
+- **The unit of work is the repository.** A Git commit covers the whole repository, so writes are serialized per repository by one Durable Object ([ADR 008](../adr/008-one-durable-object-per-repository.md)). Different repositories never contend: one repository per team (or per person) shards writes for free, and each Durable Object runs near where it is first requested.
 - **Reads don't touch the writer.** Notes are read through the Artifacts binding; search reads D1 and Vectorize. Read traffic grows without queueing behind writes.
 - **Indexing is idempotent and re-checks the head**, so it can be retried, duplicated or replayed without corrupting the index ([ADR 010](../adr/010-index-manifest-in-d1.md)).
 - **Reconciliation is per run, resumable, and only enqueues** ([ADR 009](../adr/009-queue-for-indexing-workflow-for-reconciliation.md)); one Workflow instance per repository would reconcile each independently.
@@ -18,7 +18,7 @@ v2 serves one person. This note looks at what changes if it served a team, or ma
 
 | Area | v2 (one person) | At scale | Why |
 |---|---|---|---|
-| Write throughput | One repository; ~1.8 writes/s measured in the spike | One repository per team or project | The ceiling is per repository, and a commit is per repository |
+| Write throughput | One repository; ~1.8 writes/s, estimated from ~0.54 s per write in the spike | One repository per team or project | The ceiling is per repository, and a commit is per repository |
 | Indexing order | One Queue consumer (`max_concurrency: 1`) for everything | Per-repository ordering: several consumers, with a per-repository lock (or a Durable Object per repository doing the indexing) | One global consumer becomes the bottleneck; order only matters within a repository |
 | Index isolation | One Vectorize index, one D1 database | A tenant id in vector metadata and every D1 row, filtered on every query; or an index and a database per large tenant | Search must never return another team's notes |
 | Access control | One GitHub account (`OWNER_GITHUB_ID`) | Users and groups (GitHub org or an identity provider via Cloudflare Access), grants scoped to repositories, an audit log per user | Who can read or write which repository becomes the core of the product |

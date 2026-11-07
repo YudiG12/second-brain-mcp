@@ -28,12 +28,12 @@ I keep a "second brain": Markdown notes on ideas, projects, decisions and plans.
 
 The full design is in the [v2 spec](docs/spec/v2.md); what v2 changed and fixed is in the [CHANGELOG](CHANGELOG.md).
 
-## Numbers (production, p50)
+## Numbers (production, p50 of 10 runs)
 
 | | v1 | v2 |
 |---|---|---|
 | Write a note | 4.1 s | 2.1 s |
-| New note findable by keyword | — | ~12 s |
+| New note findable by keyword | immediate (reads every note) | ~12 s |
 | New note findable by meaning | 122 s | 53 s |
 | `search_notes` | 2.8 s, reads every note | 1.5 s, reads none |
 
