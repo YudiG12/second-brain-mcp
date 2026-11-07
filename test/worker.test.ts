@@ -1,50 +1,27 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { accessToken, callTool } from "./helpers/oauth";
 
 // The Worker answers 404 to anything outside the secret prefix (ADR 004, spec v1 §2).
 describe("routing", () => {
-  it.each(["/", "/wrong-token/mcp", "/test-token"])("returns 404 for %s", async (path) => {
-    const res = await exports.default.fetch(`https://example.com${path}`);
-    expect(res.status).toBe(404);
-  });
-
-  it("passes requests under the secret prefix to the MCP handler", async () => {
-    const res = await exports.default.fetch("https://example.com/test-token/mcp");
-    expect(res.status).not.toBe(404);
-  });
-
-  it.each(["/test-token/reindex", "/test-token/anything"])("serves only /mcp under the token prefix (%s is 404)", async (path) => {
+  it.each(["/", "/wrong-token/mcp", "/test-token", "/test-token/mcp", "/test-token/reindex"])("returns 404 for %s (the token-in-URL route is gone, #52)", async (path) => {
     const res = await exports.default.fetch(`https://example.com${path}`, { method: "POST" });
     expect(res.status).toBe(404);
   });
 
-  it("no longer serves the GitHub webhook (ADR 007; closes #42 by removal)", async () => {
-    const res = await exports.default.fetch("https://example.com/test-token/github-webhook", {
-      method: "POST",
-      headers: { "X-Hub-Signature-256": "sha256=", "X-GitHub-Event": "push" },
-      body: "{}",
-    });
-    expect(res.status).not.toBe(500);
-    expect(res.status).not.toBe(202);
+  it("answers /mcp without a token with 401", async () => {
+    expect((await exports.default.fetch("https://example.com/mcp", { method: "POST" })).status).toBe(401);
   });
 });
 
-// Calls an MCP tool over the Streamable HTTP endpoint and returns its text.
-async function callTool(name: string, args: Record<string, unknown>) {
-  const res = await exports.default.fetch("https://example.com/test-token/mcp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
-  });
-  const body = await res.text();
-  const data = body.split("\n").find((l) => l.startsWith("data:"))?.slice(5) ?? body;
-  return JSON.stringify(JSON.parse(data));
-}
-
 describe("read_note path rules (#30)", () => {
+  let token = "";
+  beforeAll(async () => {
+    token = await accessToken();
+  });
   // There is no ARTIFACTS binding in tests: reaching storage would fail with a TypeError, not "Invalid path".
   it.each(["../x.md", "a/../../b.md", "notes.txt", "a//b.md", "/x.md"])("refuses %j before touching storage", async (path) => {
-    expect(await callTool("read_note", { path })).toMatch(/Invalid path/);
+    expect(await callTool(token, "read_note", { path })).toMatch(/Invalid path/);
   });
 });
 
