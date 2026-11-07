@@ -4,7 +4,7 @@
 
 How to recreate the infrastructure from this repo ([ADR 006](adr/006-wrangler-and-a-setup-script-instead-of-terraform.md)).
 
-Everything that changes per deployment is in `wrangler.jsonc`: `name`, `account_id`, `vars` (`PUBLIC_URL`, `CF_ACCOUNT_ID`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID`), and the D1 and KV ids that `scripts/setup.sh` asks for. The scripts read it through `scripts/config.mjs`; `node scripts/config.mjs check` validates it.
+Everything that changes per deployment is in `wrangler.jsonc`: `name`, `account_id`, `vars` (`PUBLIC_URL`, `CF_ACCOUNT_ID`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID`), and the D1 and KV ids, which `scripts/setup.sh` writes itself. The scripts read it through `scripts/config.mjs`; `node scripts/config.mjs check` validates it.
 
 ## Requirements
 - Node 24 or later (`.nvmrc`), then `npm ci`.

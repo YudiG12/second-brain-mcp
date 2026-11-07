@@ -25,13 +25,13 @@ npm run mac-hook
 
 ## How to use
 
-Claude Code:
+The installer prints your `<PUBLIC_URL>`. Claude Code:
 
 ```sh
-claude mcp add --transport http second-brain https://<your-worker>.workers.dev/mcp
+claude mcp add --transport http second-brain <PUBLIC_URL>/mcp
 ```
 
-Claude (web, desktop, phone) and ChatGPT: add a custom connector with `https://<your-worker>.workers.dev/mcp`.
+Claude (web, desktop, phone) and ChatGPT: add a custom connector with `<PUBLIC_URL>/mcp`.
 
 Then ask:
 

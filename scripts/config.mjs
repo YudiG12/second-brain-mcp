@@ -64,9 +64,10 @@ function check() {
   return "ok";
 }
 
-/** `set <key> <value>`: rewrites one value in place, keeping comments and layout, then checks it. */
+/** `set <key> <value>`: rewrites one value in place, keeping comments and layout, and reads it back. */
 function setValue(k, v) {
   if (!k || v === undefined) die("usage: node scripts/config.mjs set <key> <value>");
+  if (v === "") die(`refusing an empty value for ${k}`);
   if (/["\\\n]/.test(v)) die(`refusing a value with a quote, backslash or newline: ${k}`);
   const where = { // [section to search after, field name, how to read it back]
     name: [null, "name", (c) => c.name],

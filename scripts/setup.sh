@@ -38,14 +38,28 @@ else
 fi
 
 echo "== D1 database $DB"
-wr d1 info "$DB" >/dev/null 2>&1 && echo "ok: exists" || { wr d1 create "$DB" >/dev/null && echo "ok: created"; }
-cfg set d1_id "$(wr d1 info "$DB" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).uuid))')"
+# by name through the API: `d1 info` would use the database_id in wrangler.jsonc, which on a fresh
+# copy belongs to someone else's account
+d1_id() { wr d1 list --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s).find(d=>d.name===process.argv[1]);console.log(d?d.uuid:"")})' "$DB"; }
+id=$(d1_id)
+[ -n "$id" ] && echo "ok: exists" || { wr d1 create "$DB" >/dev/null; id=$(d1_id); [ -n "$id" ] || { echo "could not create D1 database $DB"; exit 1; }; echo "ok: created"; }
+cfg set d1_id "$id"
 wr d1 migrations apply "$DB" --remote >/dev/null && echo "ok: migrations applied"
 
-echo "== KV namespace OAUTH_KV"
-kv_id() { wr kv namespace list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const n=JSON.parse(s).find(n=>n.title==="OAUTH_KV"||n.title.endsWith("-OAUTH_KV"));console.log(n?n.id:"")})'; }
-[ -n "$(kv_id)" ] && echo "ok: exists" || { wr kv namespace create OAUTH_KV >/dev/null && echo "ok: created"; }
-cfg set kv_id "$(kv_id)"
+# OAuth grants live here. The namespace is named after this Worker, never a generic OAUTH_KV that
+# another OAuth Worker in the same account could be using; an id already in wrangler.jsonc that
+# exists in this account is kept.
+KV="$(cfg name)-oauth"
+echo "== KV namespace for OAuth"
+kv_list=$(wr kv namespace list)
+kv_find() { printf '%s' "$kv_list" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const n=JSON.parse(s).find(n=>n[process.argv[1]]===process.argv[2]);console.log(n?n.id:"")})' "$1" "$2"; }
+id=$(kv_find id "$(cfg kv_id)")
+[ -n "$id" ] || id=$(kv_find title "$KV")
+if [ -n "$id" ]; then echo "ok: exists"; else
+  wr kv namespace create "$KV" >/dev/null; kv_list=$(wr kv namespace list); id=$(kv_find title "$KV")
+  [ -n "$id" ] || { echo "could not create KV namespace $KV"; exit 1; }; echo "ok: created $KV"
+fi
+cfg set kv_id "$id"
 
 echo "== Queues"
 for q in "$QUEUE" "$DLQ"; do
@@ -71,4 +85,4 @@ else
   exit 1
 fi
 
-echo "Done. Next: push the notes (first time), npx wrangler deploy, then scripts/secrets.sh github-oauth and admin (and hook for a Mac clone). See docs/setup.md."
+[ -n "${DEPLOY_YOUR_OWN:-}" ] || echo "Done. Next: push the notes (first time), npx wrangler deploy, then scripts/secrets.sh github-oauth and admin (and hook for a Mac clone). See docs/setup.md."

@@ -74,7 +74,7 @@ check "a backup of the old file is kept" 'grep -q "say done" "$T/s.json.bak" && 
 merge "$T/s.json"
 check "running it twice adds nothing" '[ "$(grep -o "notes-sync.sh" "$T/s.json" | wc -l | tr -d " ")" = 3 ]'
 printf '{ // a comment\n "model": "opus" }' > "$T/s.json"; cp "$T/s.json" "$T/orig.json"
-check "a file it can't parse is left alone, with a clear message" '! merge "$T/s.json" && cmp -s "$T/s.json" "$T/orig.json" && grep -q "settings.json" "$T/err" && ! grep -q "    at " "$T/err"'
+check "a file it can't parse is left alone, with a clear message" '! merge "$T/s.json" && cmp -s "$T/s.json" "$T/orig.json" && grep -q "can.t parse" "$T/err" && ! grep -q "    at " "$T/err"'
 
 echo "the repo's own config"
 check "parses" 'node "$CFG" PUBLIC_URL >/dev/null'
