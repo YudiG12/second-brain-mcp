@@ -14,14 +14,36 @@
 # Git auth: a 1-hour write token from the Worker's /hook/artifacts-token, cached in the macOS
 # Keychain. That route needs the hook secret (Keychain service "second-brain-hook"), which can only
 # issue Artifacts tokens (#39).
-DIR="${NOTES_DIR:-$HOME/dev/agentes/cerebro/notas}"
-WORKER="${SECOND_BRAIN_URL:-https://second-brain-mcp.yudiganeko.workers.dev}"
+#
+# Configuration: NOTES_DIR (the clone) and SECOND_BRAIN_URL (your Worker), from the environment or
+# from ~/.config/second-brain/hook.env as KEY=value lines. The file is read as text, never run.
 LOG="$HOME/.claude/notes-sync.log"
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/second-brain/hook.env"
+conf() { # last value of KEY in the config file: optional "export", CRLF, quotes, trailing spaces and
+  # " # comment" removed; a leading ~, $HOME or ${HOME} expanded. Nothing else is expanded or run.
+  [ -f "$CONF" ] || return 0
+  local v; v=$(tr -d '\r' < "$CONF" | sed -En "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=[[:space:]]*//p" | tail -1)
+  case "$v" in
+    \"*\"*) v=${v#\"}; v=${v%%\"*};;
+    \'*\'*) v=${v#\'}; v=${v%%\'*};;
+    *) v=${v%%[[:space:]]#*}; v=${v%"${v##*[![:space:]]}"};;
+  esac
+  case "$v" in
+    "~"|"~/"*) v="$HOME${v#\~}";;
+    '$HOME'|'$HOME/'*) v="$HOME${v#\$HOME}";;
+    '${HOME}'|'${HOME}/'*) v="$HOME${v#\$\{HOME\}}";;
+  esac
+  printf '%s' "$v"
+}
+DIR="${NOTES_DIR:-$(conf NOTES_DIR)}"
+WORKER="${SECOND_BRAIN_URL:-$(conf SECOND_BRAIN_URL)}"
 PULL_EVERY=600
 LOCK_WAIT="${NOTES_SYNC_LOCK_WAIT:-10}" # seconds to wait for another session's sync
 LOCK_STALE=120                           # a lock this old with no pid is abandoned
-cd "$DIR" 2>/dev/null || exit 0
-[ -d .git ] || exit 0
+say() { mkdir -p "$(dirname "$LOG")"; echo "$(date '+%F %T') notes-sync: $*" | tee -a "$LOG" >&2; }
+[ -n "$DIR" ] || { say "not configured: set NOTES_DIR to your notes clone, in the environment or in $CONF"; exit 1; }
+cd "$DIR" 2>/dev/null || { say "NOTES_DIR=$DIR doesn't exist"; exit 1; }
+[ -d .git ] || { say "NOTES_DIR=$DIR is not a Git clone"; exit 1; }
 export GIT_TERMINAL_PROMPT=0
 STAMP=.git/.last-pull
 LOCK=.git/notes-sync.lock
@@ -65,6 +87,7 @@ lock() {
 auth() {
   [ -n "${NOTES_SYNC_NO_AUTH:-}" ] && return 0
   local cached exp token json secret
+  [ -n "$WORKER" ] || { fail "not configured: set SECOND_BRAIN_URL to your Worker's URL, in the environment or in $CONF"; return 1; }
   cached=$(security find-generic-password -s second-brain-artifacts-token -w 2>/dev/null)
   exp=${cached%%|*}; token=${cached#*|}
   if [ -z "$cached" ] || [ $((exp - $(date +%s))) -lt 300 ]; then

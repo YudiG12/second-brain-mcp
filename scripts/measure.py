@@ -9,7 +9,7 @@ DNS goes through Cloudflare's DNS-over-HTTPS, so a stale local resolver doesn't 
 """
 import json, math, os, statistics, subprocess, sys, time, uuid
 
-URL = "https://second-brain-mcp.yudiganeko.workers.dev"
+URL = os.environ.get("SECOND_BRAIN_URL") or subprocess.run(["node", "scripts/config.mjs", "PUBLIC_URL"], check=True, capture_output=True, text=True, cwd=os.path.join(os.path.dirname(__file__), "..")).stdout.strip()
 RUNS = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 POLL_EVERY, POLL_MAX = 3.0, 600.0
 os.chdir(os.path.join(os.path.dirname(__file__), ".."))

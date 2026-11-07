@@ -17,7 +17,7 @@ To deploy your own: [docs/setup.md](docs/setup.md).
 ## How changes are made
 
 1. **Failing tests first.** Each PR starts with a red commit that describes the behavior; the next commit makes it green. A known bug can be pinned with `it.fails`, which turns red once the bug is fixed.
-2. **CI on every PR:** typecheck, the Vitest suite inside workerd, and the sync hook tests. CI comments a report with a link to the Vitest UI for each commit.
+2. **CI on every PR:** typecheck, the Vitest suite inside workerd, the sync hook tests (`bash test/hook/run.sh`) and the script tests (`bash test/scripts/run.sh`). CI comments a report with a link to the Vitest UI for each commit.
 3. **Review** by a separate reviewer with a clean context (only the diff and the docs).
 4. **Merge to `main` deploys** (D1 migrations, then `wrangler deploy`).
 

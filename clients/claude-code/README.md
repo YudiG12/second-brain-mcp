@@ -4,9 +4,9 @@ Claude Code on the Mac reads and writes the notes as local files, in a clone of 
 
 | Hook | When | Action |
 |---|---|---|
-| `SessionStart` | A session opens | `git pull --rebase --autostash` |
-| `UserPromptSubmit` | Every message | Same pull, at most once every 10 minutes |
-| `Stop` | After each answer (async) | Commit local changes; only if there is something to send: pull with rebase, push |
+| `SessionStart` | A session opens | Bring in the remote (fast-forward or merge) |
+| `UserPromptSubmit` | Every message | Same, at most once every 10 minutes |
+| `Stop` | After each answer (async) | Commit local changes; only if there is something to send: bring in the remote, then push |
 
 Git authenticates with a 1-hour write token from the Worker (`POST /hook/artifacts-token`), cached in the macOS Keychain. That route takes the hook secret, which can do nothing else.
 
@@ -19,12 +19,21 @@ Every push, from the Mac or from the MCP, emits an Artifacts `pushed` event into
 The script is macOS-only: it uses the Keychain (`security`) and BSD `stat -f`.
 
 1. Store the hook secret in the Keychain: `scripts/secrets.sh hook` creates one and saves it to the Worker and the Keychain (service `second-brain-hook`).
-2. Clone the notes repo. By default the script expects it at `~/dev/agentes/cerebro/notas`; set `NOTES_DIR` to use another path, for example in the `env` block of `~/.claude/settings.json`.
-3. Link the script into Claude Code's hooks folder, so this repo stays the single source:
+2. Clone the notes repo anywhere.
+3. Tell the hook where things are, in `~/.config/second-brain/hook.env` (or `$XDG_CONFIG_HOME/second-brain/hook.env`) or in the environment, which wins. The file is read as text, never run: `KEY=value` lines, optionally with `export`, quotes or a trailing `# comment`; only a leading `~`, `$HOME` or `${HOME}` is expanded.
+   ```sh
+   mkdir -p ~/.config/second-brain
+   cat > ~/.config/second-brain/hook.env <<'EOF'
+   NOTES_DIR=~/notes
+   SECOND_BRAIN_URL=https://<worker>.<your-subdomain>.workers.dev
+   EOF
+   ```
+   Without `NOTES_DIR` the hook stops with an error and touches nothing; `SECOND_BRAIN_URL` is needed as soon as it has to fetch a token.
+4. Link the script into Claude Code's hooks folder, so this repo stays the single source:
    ```sh
    mkdir -p ~/.claude/hooks
    ln -sf "$PWD/clients/claude-code/notes-sync.sh" ~/.claude/hooks/notes-sync.sh
    ```
-4. Merge the `hooks` block from `settings.hooks.json` into `~/.claude/settings.json`.
+5. Merge the `hooks` block from `settings.hooks.json` into `~/.claude/settings.json`.
 
 Other clients (Claude on the phone or web, ChatGPT) need no install: they connect to the MCP URL directly.
