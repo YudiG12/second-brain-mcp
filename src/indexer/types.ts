@@ -52,9 +52,15 @@ export interface Manifest {
   remove(path: string): Promise<void>;
 }
 
+/** The keyword index (D1 FTS5, ADR 012): the same chunks as the vectors. */
+export interface KeywordIndex {
+  replace(path: string, chunks: string[]): Promise<void>;
+  remove(path: string): Promise<void>;
+}
+
 export type Enqueue = (messages: IndexMessage[], delaySeconds?: number) => Promise<void>;
 
-export type Deps = { notes: NotesSource; index: VectorIndex; embedder: Embedder; manifest: Manifest; enqueue: Enqueue; repoName: string };
+export type Deps = { notes: NotesSource; index: VectorIndex; embedder: Embedder; manifest: Manifest; keywords: KeywordIndex; enqueue: Enqueue; repoName: string };
 
 /** What happened to one message (for logs and tests). */
 export type Outcome =

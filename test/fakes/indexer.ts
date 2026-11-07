@@ -61,6 +61,16 @@ export class FakeIndex implements VectorIndex {
   }
 }
 
+export class FakeKeywords {
+  rows = new Map<string, string[]>();
+  async replace(path: string, chunks: string[]) {
+    this.rows.set(path, chunks);
+  }
+  async remove(path: string) {
+    this.rows.delete(path);
+  }
+}
+
 export class FakeEmbedder implements Embedder {
   calls = 0;
   fail = false;

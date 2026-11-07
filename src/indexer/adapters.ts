@@ -1,5 +1,5 @@
 // Production adapters for the indexer's ports.
-import type { Embedder, Manifest, ManifestRow, NotesSource, Vector, VectorIndex } from "./types";
+import type { Embedder, KeywordIndex, Manifest, ManifestRow, NotesSource, Vector, VectorIndex } from "./types";
 import { ZERO_SHA } from "./types";
 
 const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual, 1024 dimensions
@@ -88,6 +88,20 @@ export class D1Manifest implements Manifest {
 
   async remove(path: string) {
     await this.db.prepare("DELETE FROM manifest WHERE path = ?").bind(path).run();
+  }
+}
+
+/** chunks_fts in D1 (ADR 012): one row per chunk, replaced in one batch. */
+export class D1Keywords implements KeywordIndex {
+  constructor(private readonly db: D1Database) {}
+  async replace(path: string, chunks: string[]) {
+    await this.db.batch([
+      this.db.prepare("DELETE FROM chunks_fts WHERE path = ?").bind(path),
+      ...chunks.map((text, seq) => this.db.prepare("INSERT INTO chunks_fts (path, seq, text) VALUES (?, ?, ?)").bind(path, seq, text)),
+    ]);
+  }
+  async remove(path: string) {
+    await this.db.prepare("DELETE FROM chunks_fts WHERE path = ?").bind(path).run();
   }
 }
 

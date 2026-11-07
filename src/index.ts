@@ -6,10 +6,15 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
-import { ArtifactsNotes, D1Manifest, VectorizeAdapter, WorkersAiEmbedder } from "./indexer/adapters";
+import { ArtifactsNotes, D1Keywords, D1Manifest, VectorizeAdapter, WorkersAiEmbedder } from "./indexer/adapters";
 import { handle } from "./indexer/indexer";
 import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
-import { checkPath, ideaPath, norm, withSuffix } from "./lib/notes";
+import { checkPath, ideaPath, withSuffix } from "./lib/notes";
+import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
+
+// semantic results below this cosine similarity are dropped, so a query with no real match can
+// return nothing (ADR 012; tune against real queries)
+const SEMANTIC_FLOOR = 0.45;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
@@ -62,6 +67,7 @@ function indexerDeps(envArg: Env): Deps {
     index: new VectorizeAdapter(envArg.VECTORS),
     embedder: new WorkersAiEmbedder(envArg.AI),
     manifest: new D1Manifest(envArg.DB),
+    keywords: new D1Keywords(envArg.DB),
     enqueue,
     repoName: envArg.NOTES_REPO,
   };
@@ -132,19 +138,30 @@ function createServer() {
 
   server.registerTool(
     "search_notes",
-    { description: "Exact keyword search across notes (ignores accents and case). Good for names, acronyms and terms.", inputSchema: { query: z.string() } },
-    async ({ query }) => {
-      const terms = norm(query).split(/\s+/).filter(Boolean);
-      const keys = await listNotes(E.ARTIFACTS);
-      const bodies = await Promise.all(keys.map((k) => readNote(E.ARTIFACTS, k)));
-      const hits: string[] = [];
-      keys.forEach((key, n) =>
-        (bodies[n] ?? "").split("\n").forEach((line, i) => {
-          const l = norm(line);
-          if (terms.every((t) => l.includes(t))) hits.push(`${key}:${i + 1}: ${line.trim()}`);
-        }),
-      );
-      return text(hits.slice(0, 40).join("\n") || "Nothing found.");
+    {
+      description: "Hybrid search across notes: exact words (names, acronyms, terms) and meaning, in one ranked list. Each result says how it matched: keyword, semantic or both. Ignores accents and case; words match by prefix.",
+      inputSchema: { query: z.string(), limit: z.number().int().min(1).max(20).optional() },
+    },
+    async ({ query, limit }) => {
+      const fts = buildFtsQuery(query);
+      // each half degrades on its own: one failing still returns the other, and says so
+      const [keyword, semantic] = await Promise.all([
+        (fts
+          ? E.DB.prepare("SELECT path, seq, text FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT 50").bind(fts).all<Hit>().then((r) => r.results)
+          : Promise.resolve([] as Hit[])
+        ).catch((e) => (console.error(JSON.stringify({ keywordSearchFailed: String(e) })), null)),
+        (async () => {
+          const [q] = await embedder().embed([query]);
+          const res = await E.VECTORS.query(q, { topK: 50, returnMetadata: "all" });
+          return semanticHits(res.matches, SEMANTIC_FLOOR);
+        })().catch((e) => (console.error(JSON.stringify({ semanticSearchFailed: String(e) })), null)),
+      ]);
+      if (keyword === null && semantic === null) return text("Search is unavailable right now. Try again in a moment.");
+      const results = fuse(keyword ?? [], semantic ?? [], limit ?? 10);
+      const lines = results.map((r) => `${r.path} (${r.matched})\n${r.text.slice(0, 400)}`);
+      const note =
+        semantic === null ? "\n\n(semantic search unavailable right now: keyword results only)" : keyword === null ? "\n\n(keyword search unavailable right now: semantic results only)" : "";
+      return text((lines.join("\n\n---\n\n") || "Nothing found.") + note);
     },
   );
 

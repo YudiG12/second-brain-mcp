@@ -4,7 +4,7 @@ import type { DropMessage, IndexMessage } from "../indexer/types";
 export type { DropMessage };
 
 export type Mode = "daily" | "rebuild";
-export type NoteSha = { path: string; sha: string };
+export type NoteSha = { path: string; sha: string; chunks?: number };
 
 /** The few Workflow features we use, so the orchestration can be tested without the runtime. */
 export interface Step {
@@ -21,6 +21,8 @@ export interface ReconcileSource {
 export interface ReconcileIndex {
   /** The manifest rows: what the index says it holds. */
   manifest(): Promise<NoteSha[]>;
+  /** Paths with rows in the keyword index (chunks_fts). */
+  keywordPaths(): Promise<string[]>;
   /** Path hashes that have vectors (rebuild only). null when listing isn't available. */
   vectorPathHashes(): Promise<string[] | null>;
 }
@@ -41,7 +43,7 @@ export type Report = {
   commit: string | null;
   notes: number;
   enqueued: number;
-  fixed: { new: number; changed: number; orphans: number; vectorOrphans: number | null };
+  fixed: { new: number; changed: number; orphans: number; vectorOrphans: number | null; keywordGaps: number };
   inFlight: number; // changed after the snapshot: not counted as missed
   alerted: boolean;
 };

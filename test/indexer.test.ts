@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/indexer/indexer";
 import { ZERO_SHA, type Deps, type PushedEvent } from "../src/indexer/types";
-import { FakeEmbedder, FakeIndex, FakeManifest, FakeNotes, FakeQueue } from "./fakes/indexer";
+import { FakeEmbedder, FakeIndex, FakeKeywords, FakeManifest, FakeNotes, FakeQueue } from "./fakes/indexer";
 
+let keywords: FakeKeywords;
 let notes: FakeNotes, index: FakeIndex, embedder: FakeEmbedder, manifest: FakeManifest, queue: FakeQueue, deps: Deps;
 
 beforeEach(() => {
@@ -11,7 +12,8 @@ beforeEach(() => {
   embedder = new FakeEmbedder();
   manifest = new FakeManifest();
   queue = new FakeQueue();
-  deps = { notes, index, embedder, manifest, enqueue: queue.enqueue, repoName: "notes" };
+  keywords = new FakeKeywords();
+  deps = { notes, index, embedder, manifest, keywords, enqueue: queue.enqueue, repoName: "notes" };
 });
 
 const pushed = (before: string, after: string, ref = "refs/heads/main", repoName = "notes"): PushedEvent => ({
@@ -25,6 +27,18 @@ describe("index(path) (spec v2 §5.2)", () => {
     expect(await handle({ type: "index", path: "a.md", reason: "write" }, deps)).toEqual({ kind: "indexed", path: "a.md", chunks: 1 });
     expect(index.pathsIndexed()).toEqual(["a.md"]);
     expect(await manifest.get("a.md")).toEqual({ path: "a.md", sha: "sha(alpha)", chunks: 1 });
+  });
+
+  it("writes the same chunks to the keyword index (ADR 012)", async () => {
+    await handle({ type: "index", path: "a.md", reason: "write" }, deps);
+    expect(keywords.rows.get("a.md")).toEqual(["alpha"]);
+  });
+
+  it("removes a deleted note from the keyword index", async () => {
+    await handle({ type: "index", path: "a.md", reason: "write" }, deps);
+    notes.commit({ "a.md": null });
+    await handle({ type: "index", path: "a.md", reason: "write" }, deps);
+    expect(keywords.rows.has("a.md")).toBe(false);
   });
 
   it("skips a note already indexed at this version (the duplicate every MCP write produces)", async () => {

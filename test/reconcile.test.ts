@@ -5,6 +5,7 @@ import type { NoteSha, ReconcileDeps, Step } from "../src/reconcile/types";
 let source: NoteSha[], manifest: NoteSha[], vectorHashes: string[] | null, sent: any[], alerts: string[], stepNames: string[], changedAfter: string[];
 let deps: ReconcileDeps;
 let resolved = 0;
+let keywordPaths: string[] | null = null;
 const step: Step = { do: async (name, fn) => (stepNames.push(name), fn()) };
 
 beforeEach(() => {
@@ -29,13 +30,14 @@ beforeEach(() => {
       allNotes: async () => source,
       changedPaths: async () => changedAfter,
     },
-    index: { manifest: async () => manifest, vectorPathHashes: async () => vectorHashes },
+    index: { manifest: async () => manifest, keywordPaths: async () => keywordPaths ?? manifest.map((r) => r.path), vectorPathHashes: async () => vectorHashes },
     enqueue: async (ms) => void sent.push(...ms),
     pathHash: async (p) => `h(${p})`,
     alert: async (b) => void alerts.push(b),
     resolveDlqAlerts: async () => void (resolved += 1),
   };
   resolved = 0;
+  keywordPaths = null; // null: the keyword index matches the manifest
 });
 
 describe("daily reconciliation (#7)", () => {
@@ -46,7 +48,7 @@ describe("daily reconciliation (#7)", () => {
       { type: "index", path: "b.md", reason: "reconcile" },
       { type: "index", path: "gone.md", reason: "reconcile" },
     ]);
-    expect(r.fixed).toEqual({ new: 1, changed: 1, orphans: 1, vectorOrphans: null });
+    expect(r.fixed).toEqual({ new: 1, changed: 1, orphans: 1, vectorOrphans: null, keywordGaps: 0 });
   });
 
   it("runs as resumable steps, one per batch of 20", async () => {
@@ -71,6 +73,21 @@ describe("daily reconciliation (#7)", () => {
     const r = await runReconcile("daily", step, deps);
     expect(r.alerted).toBe(false);
     expect(alerts).toEqual([]);
+  });
+
+  it("treats keyword-index rows of notes that are gone as orphans too", async () => {
+    keywordPaths = ["a.md", "only-in-fts.md"];
+    await runReconcile("daily", step, deps);
+    expect(sent).toContainEqual({ type: "index", path: "only-in-fts.md", reason: "reconcile" });
+  });
+
+  it("fills notes missing from the keyword index (e.g. indexed before it existed) with a rebuild, without alerting", async () => {
+    manifest = [{ path: "a.md", sha: "a1", chunks: 2 }, { path: "b.md", sha: "b2", chunks: 1 }, { path: "e.md", sha: "e1", chunks: 0 }];
+    source = [{ path: "a.md", sha: "a1" }, { path: "b.md", sha: "b2" }, { path: "e.md", sha: "e1" }];
+    keywordPaths = ["b.md"];
+    const r = await runReconcile("daily", step, deps);
+    expect(sent).toEqual([{ type: "index", path: "a.md", reason: "rebuild" }]); // e.md is empty: nothing to index
+    expect(r.alerted).toBe(false);
   });
 
   it("marks open dead-letter alerts resolved when it finishes (spec §5.2)", async () => {

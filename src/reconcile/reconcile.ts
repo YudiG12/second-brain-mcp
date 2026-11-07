@@ -17,8 +17,9 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
     return { commit, notes };
   });
 
-  const { manifest, vectorHashes } = await step.do("snapshot index", async () => ({
+  const { manifest, keywordPaths, vectorHashes } = await step.do("snapshot index", async () => ({
     manifest: await deps.index.manifest(),
+    keywordPaths: await deps.index.keywordPaths(),
     vectorHashes: mode === "rebuild" ? await deps.index.vectorPathHashes() : null,
   }));
 
@@ -29,7 +30,13 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
   const inSource = new Set(notes.map((n) => n.path));
   const fresh = notes.filter((n) => !indexed.has(n.path)).map((n) => n.path);
   const changed = notes.filter((n) => indexed.has(n.path) && indexed.get(n.path) !== n.sha).map((n) => n.path);
-  const orphans = manifest.filter((r) => !inSource.has(r.path)).map((r) => r.path);
+  const orphans = [...new Set([...manifest.map((r) => r.path), ...keywordPaths])].filter((p) => !inSource.has(p)).sort();
+
+  // Notes the manifest says are indexed but with no keyword rows (indexed before chunks_fts existed,
+  // or a partial failure): re-index with reason=rebuild, which bypasses the manifest skip.
+  const inKeywords = new Set(keywordPaths);
+  const freshOrChanged = new Set([...fresh, ...changed]);
+  const keywordGaps = manifest.filter((r) => inSource.has(r.path) && !freshOrChanged.has(r.path) && (r.chunks ?? 1) > 0 && !inKeywords.has(r.path)).map((r) => r.path);
 
   let messages: (IndexMessage | DropMessage)[];
   let vectorOrphans: number | null = null;
@@ -44,6 +51,7 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
     }
   } else {
     messages = [...fresh, ...changed, ...orphans].map((path) => ({ type: "index", path, reason }));
+    messages.push(...keywordGaps.map((path) => ({ type: "index" as const, path, reason: "rebuild" as const })));
   }
 
   const batches = Math.ceil(messages.length / BATCH);
@@ -61,7 +69,7 @@ export async function runReconcile(mode: Mode, step: Step, deps: ReconcileDeps):
       commit,
       notes: notes.length,
       enqueued: messages.length,
-      fixed: { new: fresh.length, changed: changed.length, orphans: orphans.length, vectorOrphans },
+      fixed: { new: fresh.length, changed: changed.length, orphans: orphans.length, vectorOrphans, keywordGaps: mode === "rebuild" ? 0 : keywordGaps.length },
       inFlight: fixedPaths.length - missed,
       alerted: mode === "daily" && missed > ALERT_ABOVE,
     };
