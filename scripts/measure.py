@@ -2,8 +2,8 @@
 """Measures the live MCP server: write latency, write-to-searchable latency and search latency.
 
 Usage: scripts/measure.py [runs]   (default 10)
-Auth: ACCESS_TOKEN (an OAuth access token, sent as a Bearer header to /mcp) if set; otherwise the
-legacy token URL with MCP_TOKEN from .dev.vars (removed in #52).
+Auth: ACCESS_TOKEN, an OAuth access token for /mcp (from any connected client, or by running the
+authorization flow); it is sent as a Bearer header through curl's stdin, never on the command line.
 Writes notes under _bench/ and deletes them at the end. Prints a JSON summary.
 DNS goes through Cloudflare's DNS-over-HTTPS, so a stale local resolver doesn't matter.
 """
@@ -13,14 +13,13 @@ URL = "https://second-brain-mcp.yudiganeko.workers.dev"
 RUNS = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 POLL_EVERY, POLL_MAX = 3.0, 600.0
 os.chdir(os.path.join(os.path.dirname(__file__), ".."))
-ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
-TOKEN = None if ACCESS_TOKEN else next(l.split("=", 1)[1].strip() for l in open(".dev.vars") if l.startswith("MCP_TOKEN="))
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN") or sys.exit("Set ACCESS_TOKEN to an OAuth access token for /mcp.")
 
 
 def call(tool, args):
     """Calls one MCP tool; returns (seconds, text). The token goes through curl's stdin config, not argv."""
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
-    cfg = f'url = "{URL}/mcp"\nheader = "Authorization: Bearer {ACCESS_TOKEN}"\n' if ACCESS_TOKEN else f'url = "{URL}/{TOKEN}/mcp"\n'
+    cfg = f'url = "{URL}/mcp"\nheader = "Authorization: Bearer {ACCESS_TOKEN}"\n'
     out = subprocess.run(
         ["curl", "-s", "--doh-url", "https://1.1.1.1/dns-query", "-m", "60", "-X", "POST", "--config", "-",
          "-H", "Content-Type: application/json", "-H", "Accept: application/json, text/event-stream",

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Sets the Worker's secrets without printing them. Values are saved to .dev.vars (gitignored) first.
-#   scripts/secrets.sh rotate [--yes]  new MCP_TOKEN. Every MCP client is cut off until it reconnects.
 #   scripts/secrets.sh github-oauth    reads the GitHub OAuth app's client secret from the clipboard, checks its
 #                                      shape, saves it to the Worker as GITHUB_CLIENT_SECRET, clears the clipboard
 #   scripts/secrets.sh admin           new ADMIN_SECRET (admin routes): saved to .dev.vars and the Worker
@@ -28,15 +27,6 @@ PY
 getvar() { grep "^$1=" .dev.vars | cut -d= -f2-; }
 
 case "${1:-}" in
-  rotate)
-    if [ "${2:-}" != "--yes" ]; then
-      read -r -p "This cuts off every MCP client until it reconnects. Continue? [y/N] " ok; [ "$ok" = y ] || exit 1
-    fi
-    setvar MCP_TOKEN "$(openssl rand -hex 24)"
-    printf '%s\n' "$WORKER_URL" > .worker-url
-    put MCP_TOKEN "$(getvar MCP_TOKEN)"
-    echo "New MCP URL: $WORKER_URL/<MCP_TOKEN from .dev.vars>/mcp. Reconnect the clients."
-    ;;
   github-oauth)
     S=$(pbpaste | tr -d '[:space:]')
     [[ "$S" =~ ^[0-9a-f]{40}$ ]] || { echo "The clipboard doesn't hold a GitHub OAuth client secret (40 hex characters). Generate one on the app's page and copy it."; exit 1; }
@@ -56,5 +46,5 @@ case "${1:-}" in
     security delete-generic-password -s second-brain-admin >/dev/null 2>&1 || true # the Mac no longer keeps the admin secret
     echo "ok: HOOK_SECRET in the Keychain"
     ;;
-  *) echo "usage: scripts/secrets.sh rotate [--yes] | admin | hook | github-oauth"; exit 1;;
+  *) echo "usage: scripts/secrets.sh admin | hook | github-oauth"; exit 1;;
 esac
