@@ -64,7 +64,7 @@ for i in range(RUNS):
         visible.append(sem_at)
         visible_kw.append(kw_at)
         # warm: these run right after the polling loop
-        searches_kw.append(call("search_notes", {"query": "railblocks"})[0])
+        searches_kw.append(call("search_notes", {"query": "projeto"})[0])
         searches_sem.append(call("semantic_search", {"query": "decisões de carreira", "topK": 5})[0])
         print(f"run {i + 1}/{RUNS}: write {t:.2f}s, keyword after {kw_at}s, semantic after {sem_at}s", file=sys.stderr)
     finally:

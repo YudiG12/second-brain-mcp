@@ -11,7 +11,7 @@
 v1 has two search tools. `semantic_search` uses Vectorize ([ADR 002](002-semantic-search-with-workers-ai-and-vectorize.md)). `search_notes` reads every note from GitHub on each call and matches substrings line by line: one request per note per search, so latency and cost grow with the notes (on the Free plan it even hit the 50-subrequest limit at about 49 notes) ([#13](https://github.com/YudiG12/second-brain-mcp/issues/13)).
 
 The two kinds of search find different things:
-- **Keyword** finds exact terms that embeddings blur: a person's name ("Lorenzo"), a product, an error code.
+- **Keyword** finds exact terms that embeddings blur: a person's name ("Maria"), a product, an error code.
 - **Semantic** finds the idea when the word isn't there: "money" finds a note about choosing a bank.
 
 The AI client doesn't know in advance which one will work for a query.
@@ -19,7 +19,7 @@ The AI client doesn't know in advance which one will work for a query.
 ## Decision
 
 - **A keyword index in D1**, as an FTS5 table with one row per chunk (`chunks_fts`), using the same chunks as Vectorize. The tokenizer ignores case and accents. The Queue consumer writes it together with the vectors, so it follows the same single-writer and post-write-check rules ([ADR 009](009-queue-for-indexing-workflow-for-reconciliation.md), [ADR 010](010-index-manifest-in-d1.md)).
-- **Terms are combined with OR.** AI clients send sentences ("what did I decide about Railblocks"); with AND, every word would have to be in one chunk and the keyword list would usually be empty. With OR, BM25 already ranks chunks that match more and rarer terms higher. To keep OR from matching everything, stopwords (Portuguese and English) and terms shorter than 3 characters are dropped.
+- **Terms are combined with OR.** AI clients send sentences ("what did I decide about the Acme proposal"); with AND, every word would have to be in one chunk and the keyword list would usually be empty. With OR, BM25 already ranks chunks that match more and rarer terms higher. To keep OR from matching everything, stopwords (Portuguese and English) and terms shorter than 3 characters are dropped.
 - **Each term is a quoted prefix** (`"rail"*`): only letters and digits are kept (anything else separates words) and empty terms dropped, so user input can't break the FTS5 syntax, and a word prefix still matches. The table declares `prefix='3'` to keep prefix queries fast.
 - **`search_notes` becomes hybrid:** it runs the FTS5 query (BM25) and the Vectorize query in parallel, top 50 chunks each. Semantic results below a similarity floor (started at 0.45; lowered to 0.30) are dropped. Measured on the real notes, this can't make a query with no real match return nothing: with bge-m3, unrelated questions score up to 0.48 and a real question's best note can score 0.44, so the floor only removes noise ([#33](https://github.com/YudiG12/second-brain-mcp/issues/33) compares models). The two lists are fused with **reciprocal rank fusion**: each chunk scores `Σ 1 / (60 + rank)` over the lists it appears in. Fusion uses positions, not scores, because BM25 and cosine similarity are on different scales. A note's score is its **best chunk's** score (not the sum, which would favor long notes), and each result says how it was found: `keyword`, `semantic` or `both`.
 - **`semantic_search` stays** as the pure semantic tool, for clients that already use it.
@@ -44,7 +44,7 @@ The AI client doesn't know in advance which one will work for a query.
 **Costs**
 - **A second derived index** to keep in sync, written by the same consumer. The daily reconciliation compares its paths with the source too.
 - **Backups:** `wrangler d1 export` has historically refused databases with virtual tables (verify on D1), which would block exporting the manifest and alerts too. D1 Time Travel covers the whole database, and `chunks_fts` can always be rebuilt.
-- **Word matching instead of substrings:** `rail` finds `Railblocks` by prefix, but a match in the middle of a word (`blocks` in `Railblocks`) is no longer found. The trigram tokenizer would allow it at the cost of a larger index.
+- **Word matching instead of substrings:** `acme` finds `Acmecorp` by prefix, but a match in the middle of a word (`corp` in `Acmecorp`) is no longer found. The trigram tokenizer would allow it at the cost of a larger index.
 - **The output of `search_notes` changes** from v1's `path:line: text` lines to ranked chunks.
 - **Rank fusion ignores how strong a match is,** only its position: a chunk at rank 20 in both lists (2/80) beats rank 1 in one list (1/61), and an exact name hit can tie with a loose semantic neighbor. The `both/keyword/semantic` label and the similarity floor limit the damage.
 - **Stopwords and the 3-character minimum** mean very short terms ("IA", "C6") aren't searched by keyword; semantic search still covers them.

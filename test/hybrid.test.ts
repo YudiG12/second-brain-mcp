@@ -5,11 +5,11 @@ import { buildFtsQuery, fuse, semanticHits, type Hit } from "../src/search/hybri
 
 describe("buildFtsQuery", () => {
   it("quotes each word as a prefix and joins with OR", () => {
-    expect(buildFtsQuery("Railblocks Lorenzo")).toBe('"railblocks"* OR "lorenzo"*');
+    expect(buildFtsQuery("Acmecorp Maria")).toBe('"acmecorp"* OR "maria"*');
   });
 
   it("drops Portuguese and English stopwords and words under 3 characters", () => {
-    expect(buildFtsQuery("o que eu decidi sobre a Railblocks")).toBe('"decidi"* OR "railblocks"*');
+    expect(buildFtsQuery("o que eu decidi sobre a Acmecorp")).toBe('"decidi"* OR "acmecorp"*');
     expect(buildFtsQuery("what did I decide about the job")).toBe('"decide"* OR "job"*');
   });
 
@@ -77,7 +77,7 @@ describe("chunks_fts on real local D1", () => {
   beforeAll(async () => {
     await applyD1Migrations(db, (env as any).TEST_MIGRATIONS as D1Migration[]);
     await db.batch([
-      db.prepare("INSERT INTO chunks_fts (path, seq, text) VALUES (?, 0, ?)").bind("a.md", "A decisão sobre a Railblocks e o café"),
+      db.prepare("INSERT INTO chunks_fts (path, seq, text) VALUES (?, 0, ?)").bind("a.md", "A decisão sobre a Acmecorp e o café"),
       db.prepare("INSERT INTO chunks_fts (path, seq, text) VALUES (?, 0, ?)").bind("b.md", "Notes about cooking"),
     ]);
   });
@@ -88,10 +88,10 @@ describe("chunks_fts on real local D1", () => {
   });
 
   it("matches word prefixes", async () => {
-    expect(await match(buildFtsQuery("rail")!)).toEqual(["a.md"]);
+    expect(await match(buildFtsQuery("acme")!)).toEqual(["a.md"]);
   });
 
   it("finds either word with OR", async () => {
-    expect((await match(buildFtsQuery("railblocks cooking")!)).sort()).toEqual(["a.md", "b.md"]);
+    expect((await match(buildFtsQuery("acmecorp cooking")!)).sort()).toEqual(["a.md", "b.md"]);
   });
 });
