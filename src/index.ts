@@ -33,7 +33,6 @@ interface Env {
   INDEX_JOBS: Queue<QueueMessage>;
   RECONCILE: Workflow;
   NOTES_REPO: string;
-  MCP_TOKEN: string;
   OAUTH_KV: KVNamespace;
   OAUTH_PROVIDER: import("@cloudflare/workers-oauth-provider").OAuthHelpers;
   GITHUB_CLIENT_ID: string;
@@ -296,13 +295,7 @@ const app = {
       return Response.json({ id: instance.id, mode }, { status: 202 });
     }
 
-    // secret URL: /<token>/mcp. Without the token it's a 404, as if nothing existed.
-    const prefix = `/${envArg.MCP_TOKEN}`;
-    if (!envArg.MCP_TOKEN || !url.pathname.startsWith(prefix + "/")) return new Response("Not found", { status: 404 });
-    url.pathname = url.pathname.slice(prefix.length);
-
-
-    return mcp(new Request(url.toString(), request), envArg, ctx);
+    return new Response("Not found", { status: 404 });
   },
 
   // index-jobs: one message at a time, in order (ADR 009). index-jobs-dlq: what exhausted its retries.
@@ -331,8 +324,7 @@ const app = {
 
 // The Worker is its own OAuth 2.1 authorization server (ADR 011). /mcp needs an access token;
 // /authorize, /token, /register and the discovery documents are handled here; everything else
-// goes to `app`. Until every client has moved to OAuth, the token-prefix URL keeps working
-// (`app` serves /<MCP_TOKEN>/mcp); it goes away at most a week after this deploy.
+// goes to `app`. OAuth is the only way in (the token-in-URL route was removed in #52).
 const oauth = new OAuthProvider<Env>({
   apiRoute: "/mcp",
   apiHandler: {
