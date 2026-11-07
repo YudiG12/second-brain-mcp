@@ -26,6 +26,8 @@ export interface WorkingCopy {
   /** Whether a local copy exists (false after drop or before the first sync). */
   ready(): boolean;
   read(path: string): Promise<string | null>;
+  /** Another note whose path differs from this one only in case, or null. */
+  caseTwin(path: string): Promise<string | null>;
   /** Commits on top of the local head. Returns the new commit id. */
   commit(changes: Change[], message: string): Promise<string>;
   /** "rejected" when the remote moved (non-fast-forward). Throws on any other failure, including a timeout. */

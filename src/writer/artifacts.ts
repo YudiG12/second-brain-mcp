@@ -70,6 +70,20 @@ export class ArtifactsWorkingCopy implements WorkingCopy {
     }
   }
 
+  async caseTwin(path: string) {
+    const slash = path.lastIndexOf("/");
+    const dir = `${DIR}/${path.slice(0, slash + 1)}`;
+    let names: string[];
+    try {
+      names = (await this.fs.promises.readdir(dir)) as string[];
+    } catch {
+      return null; // the folder doesn't exist yet
+    }
+    const name = path.slice(slash + 1);
+    const twin = names.find((n) => n !== name && n.toLowerCase() === name.toLowerCase());
+    return twin ? path.slice(0, slash + 1) + twin : null;
+  }
+
   async commit(changes: Change[], message: string) {
     for (const c of changes) {
       const file = `${DIR}/${c.path}`;

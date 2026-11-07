@@ -76,6 +76,12 @@ export class FakeWorkingCopy implements WorkingCopy {
     return this.local.files.get(path) ?? null;
   }
 
+  async caseTwin(path: string) {
+    await tick();
+    for (const p of this.local?.files.keys() ?? []) if (p !== path && p.toLowerCase() === path.toLowerCase()) return p;
+    return null;
+  }
+
   async commit(changes: Change[], message: string) {
     await tick();
     if (this.failCommit) throw new Error("disk full");

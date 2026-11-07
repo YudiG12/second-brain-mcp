@@ -25,6 +25,8 @@ cd "$DIR" 2>/dev/null || exit 0
 export GIT_TERMINAL_PROMPT=0
 STAMP=.git/.last-pull
 LOCK=.git/notes-sync.lock
+MERGE_SNAPSHOT=.git/notes-sync-merge # "<hash> <path>\0" of each conflicted file right after git merge
+MERGE_TS=.git/notes-sync-merge-ts    # the conflict copies' timestamp for the merge in progress
 mkdir -p "$(dirname "$LOG")"
 
 # The hook's own commits and merges ignore user settings that would break them: signing without a
@@ -79,6 +81,13 @@ auth() {
 # Commits whatever is in the working tree, so nothing local lives outside a commit during a merge.
 commit_local() {
   [ -n "$(git status --porcelain)" ] || return 0
+  # On a case-insensitive disk (macOS), two notes whose names differ only in case share one file,
+  # so committing would write one's text over the other. Stop instead (the server refuses to
+  # create such names; this only guards older ones).
+  if [ -e .GIT/HEAD ] && [ -n "$(git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d)" ]; then
+    fail "notes whose names differ only in case can't both live on this disk: $(git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d | head -3 | tr '\n' ' ')- rename one through the MCP; nothing was committed"
+    return 1
+  fi
   local n; n=$(git status --porcelain | wc -l | tr -d ' ')
   g add -A >>"$LOG" 2>&1 && g commit -qm "notes: $n file(s) via Claude Code, $(date '+%F %H:%M')" >>"$LOG" 2>&1 ||
     { fail "could not commit local changes in $DIR (see $LOG); nothing was synced"; return 1; }
@@ -95,39 +104,48 @@ conflict_name() { # a/b.md -> a/b.conflict-<ts>.md ; a/img.png -> a/img.conflict
 # conflict copy. Nothing else is touched: local commits are never rewritten or reset, so nothing
 # local can be lost, and an interrupted run just resumes here.
 resolve_merge() {
-  local ts n=0 list
-  ts=$(date '+%Y%m%d-%H%M%S')
-  list=$(mktemp)
-  git ls-files -u -z | tr '\0' '\n' | cut -f2 | sort -u | tr '\n' '\0' > "$list"
+  local resuming="${1:-0}" ts n=0 stages theirs gone
+  # one timestamp per merge, kept across an interruption, so a resumed run reuses the same copy names
+  [ -f "$MERGE_TS" ] || date '+%Y%m%d-%H%M%S' > "$MERGE_TS"
+  ts=$(cat "$MERGE_TS")
+  stages=$(mktemp); theirs=$(mktemp); gone=$(mktemp)
+  git ls-files -u -z > "$stages" # "<mode> <hash> <stage>\t<path>\0" for every conflicted path
   while IFS= read -r -d '' f; do
-    # Edited by hand after an interrupted merge (no markers left, and neither side's version):
-    # keep that edit too, as its own copy.
-    if [ -f "$f" ] && ! grep -q '^<<<<<<< ' -- "$f" 2>/dev/null; then
-      local wt; wt=$(git hash-object -- "$f")
-      if [ "$wt" != "$(git rev-parse -q ":2:$f" 2>/dev/null)" ] && [ "$wt" != "$(git rev-parse -q ":3:$f" 2>/dev/null)" ]; then
-        local edited; edited=$(conflict_name "$f" "$ts-edited")
-        cp -- "./$f" "./$edited" && git add -- "./$edited" && n=$((n + 1)) || { rm -f "$list"; fail "could not save the edited $f; the merge is left as is"; return 1; }
+    local ours="" their=""
+    while IFS= read -r -d '' e; do
+      [ "${e#*$'\t'}" = "$f" ] || continue
+      local meta="${e%%$'\t'*}"; local st="${meta##* }"; local h="${meta#* }"; h="${h%% *}"
+      [ "$st" = 2 ] && ours="$h"; [ "$st" = 3 ] && their="$h"
+    done < "$stages"
+    # Resuming an interrupted merge: keep a hand edit made since, as its own copy (anything that
+    # is neither git's output from the snapshot nor either side's version).
+    if [ "$resuming" = 1 ] && [ -f "$f" ]; then
+      local wt as_merged=""; wt=$(git hash-object -- "$f")
+      [ -f "$MERGE_SNAPSHOT" ] && as_merged=$(tr '\0' '\n' < "$MERGE_SNAPSHOT" | awk -v p="$f" '{h=$1; sub(/^[^ ]+ /,""); if ($0==p) print h}')
+      if [ "$wt" != "$as_merged" ] && [ "$wt" != "$ours" ] && [ "$wt" != "$their" ]; then
+        cp -- "./$f" "./$(conflict_name "$f" "$ts-edited")" && n=$((n + 1)) || { fail "could not save the edited $f; the merge is left as is"; return 1; }
       fi
     fi
-    if git cat-file -e ":2:$f" 2>/dev/null; then
+    if [ -n "$ours" ]; then
       local copy; copy=$(conflict_name "$f" "$ts")
-      mkdir -p -- "$(dirname -- "$copy")" && rm -f -- "./$copy" && git show ":2:$f" > "./$copy" && git add -- "./$copy" || { rm -f "$list"; fail "could not save the local version of $f; the merge is left as is for the next run"; return 1; }
+      mkdir -p -- "$(dirname -- "$copy")" && rm -f -- "./$copy" && git cat-file blob "$ours" > "./$copy" || { fail "could not save the local version of $f; the merge is left as is for the next run"; return 1; }
       n=$((n + 1))
     fi
-    if git cat-file -e ":3:$f" 2>/dev/null; then
-      git checkout --theirs -- "./$f" >>"$LOG" 2>&1 && git add -- "./$f" >>"$LOG" 2>&1
-    else
-      git rm -q -- "./$f" >>"$LOG" 2>&1 # deleted on the remote; the local version is in the copy
-    fi || { rm -f "$list"; fail "could not resolve $f; the merge is left as is for the next run"; return 1; }
+    if [ -n "$their" ]; then printf '%s\0' "$f" >> "$theirs"; else printf '%s\0' "$f" >> "$gone"; fi
     [ -n "${NOTES_SYNC_TEST_DIE_MID_RESOLVE:-}" ] && kill -9 $$
-  done < "$list"
-  rm -f "$list"
-  [ -n "$(git ls-files -u)" ] && { fail "conflicts remain in $DIR; the merge is left as is for the next run"; return 1; }
+  done < <(tr '\0' '\n' < "$stages" | cut -f2 | sort -u | tr '\n' '\0')
+  # the remote version at each path (or its deletion), in one call each
+  { [ ! -s "$theirs" ] || git checkout --theirs --pathspec-from-file="$theirs" --pathspec-file-nul >>"$LOG" 2>&1; } &&
+    { [ ! -s "$gone" ] || git rm -q --pathspec-from-file="$gone" --pathspec-file-nul >>"$LOG" 2>&1; } ||
+    { rm -f "$stages" "$theirs" "$gone"; fail "could not resolve the conflicts; the merge is left as is for the next run"; return 1; }
+  rm -f "$stages" "$theirs" "$gone"
   [ -n "${NOTES_SYNC_TEST_DURING_RESOLVE:-}" ] && eval "$NOTES_SYNC_TEST_DURING_RESOLVE"
-  g add -A >>"$LOG" 2>&1 # anything written meanwhile goes into the merge commit, not lost
+  g add -A >>"$LOG" 2>&1 # the copies, and anything written meanwhile, go into the merge commit
+  [ -n "$(git ls-files -u)" ] && { fail "conflicts remain in $DIR; the merge is left as is for the next run"; return 1; }
   g commit -q --no-edit >>"$LOG" 2>&1 || { fail "could not commit the merge in $DIR"; return 1; }
+  rm -f "$MERGE_SNAPSHOT" "$MERGE_TS"
   # git moves a remote file out of a local folder's way as "<name>~<ref>": both survive, but say so
-  local moved; moved=$(git ls-files | grep -c '~refs_remotes_' || true)
+  local moved; moved=$(git diff --name-only --diff-filter=A HEAD^1 HEAD 2>/dev/null | grep -c '~refs_remotes_' || true)
   [ "$moved" -gt 0 ] && n=$((n + moved))
   [ "$n" -gt 0 ] && CONFLICTS="$n local version(s) saved as *.conflict-$ts.*"
   return 0
@@ -143,6 +161,10 @@ sync_remote() {
   fi
   g merge -q --no-edit "$UPSTREAM" >>"$LOG" 2>&1 && { split_case_clashes; return; }
   [ -f .git/MERGE_HEAD ] || { fail "merge failed in $DIR (see $LOG)"; return 1; }
+  # remember each conflicted file as git wrote it, so a resumed run can tell a hand edit apart
+  : > "$MERGE_SNAPSHOT"
+  while IFS= read -r -d '' f; do [ -f "$f" ] && printf '%s %s\0' "$(git hash-object -- "$f")" "$f" >> "$MERGE_SNAPSHOT"; done \
+    < <(git ls-files -u -z | tr '\0' '\n' | cut -f2 | sort -u | tr '\n' '\0')
   resolve_merge && split_case_clashes
 }
 
@@ -158,7 +180,7 @@ split_case_clashes() {
       git cat-file -e "$UPSTREAM:$f" 2>/dev/null && continue # the remote's spelling stays
       local copy; copy=$(conflict_name "$f" "$ts")
       git show "HEAD:$f" > "./$copy.tmp" && g rm -q --cached -- "./$f" >>"$LOG" 2>&1 && mv "./$copy.tmp" "./$copy" && g add -- "./$copy" && n=$((n + 1))
-      git checkout -q "$UPSTREAM" -- "$(git ls-tree -r --name-only -z "$UPSTREAM" | tr '\0' '\n' | grep -ix -- "$f" | head -1)" 2>>"$LOG"
+      git checkout -q "$UPSTREAM" -- "$(git ls-tree -r --name-only -z "$UPSTREAM" | tr '\0' '\n' | grep -Fix -- "$f" | head -1)" 2>>"$LOG"
     done < <(git ls-files -z)
   done < <(git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d)
   [ "$n" -gt 0 ] || return 0
@@ -172,7 +194,7 @@ recover() {
     fail "$DIR is in the middle of a rebase (left by an older version of this hook); nothing was changed. Run 'git rebase --abort' there, then sync again."
     return 1
   fi
-  [ -f .git/MERGE_HEAD ] && { resolve_merge || return 1; }
+  [ -f .git/MERGE_HEAD ] && { resolve_merge 1 || return 1; }
   return 0
 }
 

@@ -128,7 +128,8 @@ echo "both spellings of a name come from the remote (macOS: one file on disk)"
 setup
 (cd "$T/other" && printf 'mac-old\n' > ideias/nota.md && git add -A && git commit -qm n && git push -q)
 bash "$HOOK" pull 2>/dev/null
-(cd "$T/other" && printf 'phone\n' > ideias/Nota.md && git add -A && git commit -qm N && git push -q)
+# a case-sensitive writer (the Worker) adds Nota.md next to nota.md; plumbing, so it works on macOS too
+(cd "$T/other" && h=$(printf 'phone\n' | git hash-object -w --stdin) && git update-index --add --cacheinfo "100644,$h,ideias/Nota.md" && git commit -qm N && git push -q)
 bash "$HOOK" pull 2>/dev/null
 printf 'y\n' > "$T/mac/ideias/y.md"; bash "$HOOK" push 2>/dev/null
 check "a later sync doesn't overwrite one spelling with the other" '[ "$(remote_file ideias/nota.md)" = "mac-old" ] && [ "$(remote_file ideias/Nota.md)" = "phone" ]'
