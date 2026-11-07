@@ -14,6 +14,7 @@ Order matters: the notes must be in Artifacts before any deploy that reads from 
 3. **Deploy:** `npx wrangler deploy` the first time (the Worker must exist before it has secrets). After that, merges to `main` deploy through CI.
 4. **Secrets:**
    - `scripts/secrets.sh rotate`: new `MCP_TOKEN`, saved to `.dev.vars` (gitignored) first, then to the Worker. It asks for confirmation, since every client must reconnect.
+   - `scripts/secrets.sh github-oauth`: copy the GitHub OAuth app's client secret and run it; it checks the shape, saves `GITHUB_CLIENT_SECRET` and clears the clipboard. The app's client id is public and lives in `wrangler.jsonc` (`GITHUB_CLIENT_ID`), with `OWNER_GITHUB_ID`; its callback URL is `https://second-brain-mcp.yudiganeko.workers.dev/callback`.
    - `scripts/secrets.sh admin`: new `ADMIN_SECRET` for the admin routes, saved to the Worker and `.dev.vars`.
    - `scripts/secrets.sh hook`: new `HOOK_SECRET`, which can only issue Artifacts tokens, saved to the Worker, `.dev.vars` and the macOS Keychain (the Mac sync hook reads it there).
 5. **Index:** start a rebuild once: `POST /admin/reconcile?mode=rebuild` with `Authorization: Bearer <ADMIN_SECRET>`. It enqueues every note. After that, the daily reconciliation keeps the index in line.

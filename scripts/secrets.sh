@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Sets the Worker's secrets without printing them. Values are saved to .dev.vars (gitignored) first.
 #   scripts/secrets.sh rotate [--yes]  new MCP_TOKEN. Every MCP client is cut off until it reconnects.
+#   scripts/secrets.sh github-oauth    reads the GitHub OAuth app's client secret from the clipboard, checks its
+#                                      shape, saves it to the Worker as GITHUB_CLIENT_SECRET, clears the clipboard
 #   scripts/secrets.sh admin           new ADMIN_SECRET (admin routes): saved to .dev.vars and the Worker
 #   scripts/secrets.sh hook            new HOOK_SECRET (only issues Artifacts tokens): saved to .dev.vars,
 #                                      the Worker and the macOS Keychain (service "second-brain-hook")
@@ -35,6 +37,12 @@ case "${1:-}" in
     put MCP_TOKEN "$(getvar MCP_TOKEN)"
     echo "New MCP URL: $WORKER_URL/<MCP_TOKEN from .dev.vars>/mcp. Reconnect the clients."
     ;;
+  github-oauth)
+    S=$(pbpaste | tr -d '[:space:]')
+    [[ "$S" =~ ^[0-9a-f]{40}$ ]] || { echo "The clipboard doesn't hold a GitHub OAuth client secret (40 hex characters). Generate one on the app's page and copy it."; exit 1; }
+    put GITHUB_CLIENT_SECRET "$S"
+    pbcopy </dev/null; echo "Clipboard cleared."
+    ;;
   admin)
     setvar ADMIN_SECRET "$(openssl rand -hex 32)"
     put ADMIN_SECRET "$(getvar ADMIN_SECRET)"
@@ -48,5 +56,5 @@ case "${1:-}" in
     security delete-generic-password -s second-brain-admin >/dev/null 2>&1 || true # the Mac no longer keeps the admin secret
     echo "ok: HOOK_SECRET in the Keychain"
     ;;
-  *) echo "usage: scripts/secrets.sh rotate [--yes] | admin | hook"; exit 1;;
+  *) echo "usage: scripts/secrets.sh rotate [--yes] | admin | hook | github-oauth"; exit 1;;
 esac
