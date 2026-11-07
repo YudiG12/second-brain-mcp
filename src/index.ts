@@ -12,9 +12,10 @@ import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
 import { checkPath, ideaPath, withSuffix } from "./lib/notes";
 import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 
-// semantic results below this cosine similarity are dropped, so a query with no real match can
-// return nothing (ADR 012; tune against real queries)
-const SEMANTIC_FLOOR = 0.45;
+// Semantic results below this cosine similarity are dropped. It only removes noise: measured on the
+// real notes, bge-m3 scores unrelated questions up to 0.48 and a real question's best note can be
+// 0.44, so no floor separates them (ADR 012, #33). The first guess, 0.45, cut real results.
+const SEMANTIC_FLOOR = 0.3;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
