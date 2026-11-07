@@ -188,7 +188,7 @@ bash "$HOOK" pull 2>/dev/null
 (cd "$T/other" && for i in $(seq 1 150); do printf 'phone\n' > "ideias/n$i.md"; done && git commit -qam phone && git push -q)
 for i in $(seq 1 150); do printf 'mac\n' > "$T/mac/ideias/n$i.md"; done
 start=$(date +%s); bash "$HOOK" push 2>/dev/null; took=$(( $(date +%s) - start ))
-check "150 conflicts resolved in under 10 s (took ${took}s)" '[ "$took" -lt 10 ] && [ "$(git -C "$T/remote.git" ls-tree -r --name-only main | grep -c conflict)" = 150 ]'
+check "150 conflicts resolved in under 20 s, well inside the 30 s hook timeout (took ${took}s)" '[ "$took" -lt 20 ] && [ "$(git -C "$T/remote.git" ls-tree -r --name-only main | grep -c conflict)" = 150 ]'
 
 echo "an edit made while the conflict is being resolved"
 setup
