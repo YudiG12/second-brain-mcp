@@ -4,11 +4,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ACCOUNT_ID="337de6b8e4de301a53ecae0c06afcc72"
-SUBDOMAIN="yudiganeko"
-INDEX="second-brain"
-NAMESPACE="second-brain"
-NOTES_REPO="notes"
+# every name comes from wrangler.jsonc, the one file to edit for your own deployment
+cfg() { node scripts/config.mjs "$1"; }
+ACCOUNT_ID=$(cfg account_id)
+SUBDOMAIN=$(cfg subdomain)
+INDEX=$(cfg VECTORIZE_INDEX)
+NAMESPACE=$(cfg namespace)
+NOTES_REPO=$(cfg NOTES_REPO)
 
 wr() { npx --no-install wrangler "$@"; }
 api() { # Cloudflare API with the same credentials Wrangler uses; the token goes through stdin, never argv

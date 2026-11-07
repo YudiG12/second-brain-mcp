@@ -42,7 +42,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           out=$(npx wrangler versions upload -c reports.wrangler.jsonc --preview-alias "pr-${{ github.event.pull_request.number }}" 2>&1)
-          echo "url=https://pr-${{ github.event.pull_request.number }}-second-brain-mcp-tests.yudiganeko.workers.dev" >> "$GITHUB_OUTPUT"
+          echo "url=https://pr-${{ github.event.pull_request.number }}-second-brain-mcp-tests.$(node scripts/config.mjs subdomain).workers.dev" >> "$GITHUB_OUTPUT"
           # each upload also gets its own URL, so every commit keeps its report (red ones included)
           echo "version_url=$(printf '%s\n' "$out" | grep -o 'Version Preview URL: https://[^ ]*' | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       - name: Post the test report on the PR

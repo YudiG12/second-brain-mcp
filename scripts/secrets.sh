@@ -9,7 +9,7 @@ set -euo pipefail
 umask 077
 cd "$(dirname "$0")/.."
 
-WORKER_URL="https://second-brain-mcp.yudiganeko.workers.dev"
+WORKER_URL=$(node scripts/config.mjs PUBLIC_URL) # from wrangler.jsonc
 
 # value goes through stdin, never argv
 put() { printf '%s' "$2" | npx --no-install wrangler secret put "$1" >/dev/null && echo "ok: $1"; }
