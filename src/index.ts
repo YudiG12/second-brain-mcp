@@ -246,7 +246,7 @@ const app = {
 
     // OAuth grants: list (GET /admin/grants) and revoke one (DELETE /admin/grants/<id>) (ADR 011)
     if (url.pathname === "/admin/grants" || url.pathname.startsWith("/admin/grants/")) {
-      if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
+      if (!(await hasBearer(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
       const id = url.pathname.slice("/admin/grants/".length);
       if (request.method === "GET" && !id) {
         const { items } = await envArg.OAUTH_PROVIDER.listUserGrants(envArg.OWNER_GITHUB_ID);
