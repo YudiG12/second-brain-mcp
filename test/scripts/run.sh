@@ -61,6 +61,21 @@ check "other settings and the comments survive" '[ "$(get NOTES_REPO)" = notes ]
 check "after all of it, check passes" 'get check >/dev/null'
 check "an unknown key fails" '! put nope x'
 check "a value with a quote is refused" '! put name "a\"b"'
+check "an empty value is refused" '! put GITHUB_CLIENT_ID ""'
+
+echo "merge-hooks: adds the sync hooks to Claude Code settings"
+M="$ROOT/scripts/merge-hooks.mjs"
+merge() { node "$M" "$1" 2>"$T/err"; }
+rm -f "$T/s.json"; merge "$T/s.json"
+check "a missing settings file is created with the three hooks" '[ "$(node -e "const s=require(process.argv[1]);console.log(Object.keys(s.hooks).sort().join())" "$T/s.json")" = "SessionStart,Stop,UserPromptSubmit" ]'
+printf '{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}' > "$T/s.json"; merge "$T/s.json"
+check "other settings and existing hooks are kept" 'grep -q opus "$T/s.json" && grep -q "say done" "$T/s.json" && grep -q notes-sync "$T/s.json"'
+check "a backup of the old file is kept" 'grep -q "say done" "$T/s.json.bak" && ! grep -q notes-sync "$T/s.json.bak"'
+merge "$T/s.json"
+check "running it twice adds nothing" '[ "$(grep -o "notes-sync.sh" "$T/s.json" | wc -l | tr -d " ")" = 3 ]'
+printf '{ // a comment\n "model": "opus" }' > "$T/s.json"; cp "$T/s.json" "$T/orig.json"
+check "a file it can't parse is left alone, with a clear message" '! merge "$T/s.json" && cmp -s "$T/s.json" "$T/orig.json" && grep -q "settings.json" "$T/err" && ! grep -q "    at " "$T/err"'
+
 echo "the repo's own config"
 check "parses" 'node "$CFG" PUBLIC_URL >/dev/null'
 
