@@ -21,8 +21,13 @@ export async function accessToken(): Promise<string> {
     const url = String(input instanceof Request ? input.url : input);
     return url.includes("access_token") ? Response.json({ access_token: "gh" }) : Response.json({ id: 42, login: "owner" });
   });
-  const back = await fetchWorker(`/callback?code=c&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookies(approve) } });
-  spy.mockRestore();
+  let back: Response;
+  try {
+    back = await fetchWorker(`/callback?code=c&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookies(approve) } });
+  } finally {
+    spy.mockRestore();
+  }
+  if (back.status !== 302) throw new Error(`sign-in failed at /callback: ${back.status}`);
   const code = new URL(back.headers.get("Location")!).searchParams.get("code")!;
   const tok = await fetchWorker("/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "authorization_code", code, client_id, redirect_uri: REDIRECT, code_verifier: verifier, resource: `${BASE}/mcp` }) });
   return ((await tok.json()) as { access_token: string }).access_token;

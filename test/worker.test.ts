@@ -2,7 +2,7 @@ import { exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { accessToken, callTool } from "./helpers/oauth";
 
-// The Worker answers 404 to anything outside the secret prefix (ADR 004, spec v1 §2).
+// Unknown routes are 404; /mcp needs an OAuth token.
 describe("routing", () => {
   it.each(["/", "/wrong-token/mcp", "/test-token", "/test-token/mcp", "/test-token/reindex"])("returns 404 for %s (the token-in-URL route is gone, #52)", async (path) => {
     const res = await exports.default.fetch(`https://example.com${path}`, { method: "POST" });

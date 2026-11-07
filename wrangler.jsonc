@@ -8,12 +8,12 @@
   "workers_dev": true,
   // Every resource below is created by scripts/setup.sh; secrets by scripts/secrets.sh.
   // Notes live in Cloudflare Artifacts (ADR 007); writes go through the RepoWriter Durable Object (ADR 008).
-  // Secrets: MCP_TOKEN, ADMIN_SECRET. Pushes to the notes repo reach index-jobs through an event
+  // Secrets: ADMIN_SECRET, HOOK_SECRET, GITHUB_CLIENT_SECRET. Pushes to the notes repo reach index-jobs through an event
   // subscription created by scripts/setup.sh (Artifacts `pushed` events).
   "ai": { "binding": "AI" },
   // semantic index: 1024 dimensions (bge-m3), cosine
   "vectorize": [{ "binding": "VECTORS", "index_name": "second-brain" }],
-  // invocation logs would record request URLs, which carry MCP_TOKEN until OAuth (ADR 004, ADR 011)
+  // invocation logs would record request URLs, and /authorize and /callback query strings carry OAuth codes and state
   // the Artifacts repository that holds the notes; a staging deploy points at a scratch repo
   "vars": { "PUBLIC_URL": "https://second-brain-mcp.yudiganeko.workers.dev", "OWNER_GITHUB_ID": "42354260", "GITHUB_CLIENT_ID": "Ov23liHbglhKscajvd3A", "NOTES_REPO": "notes", "VECTORIZE_INDEX": "second-brain", "CF_ACCOUNT_ID": "337de6b8e4de301a53ecae0c06afcc72" },
   "artifacts": [{ "binding": "ARTIFACTS", "namespace": "second-brain" }],
