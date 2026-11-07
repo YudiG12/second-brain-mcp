@@ -253,6 +253,33 @@ NOTES_SYNC_LOCK_WAIT=1 bash "$HOOK" push 2>"$T/err"; code=$?
 check "a skip is visible, not silent" '[ $code = 1 ] && grep -q "skipped" "$T/err" && grep -q "skipped" "$HOME/.claude/notes-sync.log"'
 rm -rf "$T/mac/.git/notes-sync.lock"
 
+echo "configuration (no owner defaults)"
+setup
+cfg="$HOME/.config/second-brain"; rm -rf "$cfg"
+printf 'local edit\n' > "$T/mac/ideias/cfg.md"
+( unset NOTES_DIR SECOND_BRAIN_URL; bash "$HOOK" push 2>"$T/err" ); code=$?
+check "without NOTES_DIR or a config file it fails loudly" '[ $code = 1 ] && grep -q "NOTES_DIR" "$T/err"'
+check "and touches nothing" '[ -z "$(git -C "$T/mac" log origin/main..HEAD --oneline)" ] && [ ! -e "$T/mac/.git/notes-sync.lock" ]'
+mkdir -p "$cfg"; printf '# hook config\nNOTES_DIR=%s\nUNKNOWN=x\n' "$T/mac" > "$cfg/hook.env"
+( unset NOTES_DIR; bash "$HOOK" push ); code=$?
+check "reads NOTES_DIR from ~/.config/second-brain/hook.env" '[ $code = 0 ] && [ "$(remote_file ideias/cfg.md)" = "local edit" ]'
+printf 'NOTES_DIR=~/notes-from-tilde\n' > "$cfg/hook.env"; mkdir -p "$HOME/notes-from-tilde"
+( unset NOTES_DIR; bash "$HOOK" push 2>"$T/err" ); code=$?
+check "a leading ~ in the file means \$HOME" 'grep -q "$HOME/notes-from-tilde" "$T/err"'
+printf 'NOTES_DIR=%s\n' "$T/nowhere" > "$cfg/hook.env"
+printf 'from env\n' > "$T/mac/ideias/env.md"
+bash "$HOOK" push; code=$?
+check "the environment wins over the file" '[ $code = 0 ] && [ "$(remote_file ideias/env.md)" = "from env" ]'
+printf 'NOTES_DIR=$(touch %s/pwned)\n' "$T" > "$cfg/hook.env"
+( unset NOTES_DIR; bash "$HOOK" push 2>/dev/null )
+check "the file is read as text, never executed" '[ ! -e "$T/pwned" ]'
+( unset NOTES_DIR; export NOTES_DIR="$T/missing"; bash "$HOOK" push 2>"$T/err" ); code=$?
+check "a NOTES_DIR that doesn't exist fails loudly" '[ $code = 1 ] && grep -q "$T/missing" "$T/err"'
+rm -rf "$cfg"
+printf 'needs auth\n' > "$T/mac/ideias/auth.md"
+( unset NOTES_SYNC_NO_AUTH SECOND_BRAIN_URL; bash "$HOOK" push 2>"$T/err" ); code=$?
+check "without SECOND_BRAIN_URL a sync that needs a token fails loudly" '[ $code = 1 ] && grep -q "SECOND_BRAIN_URL" "$T/err"'
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
