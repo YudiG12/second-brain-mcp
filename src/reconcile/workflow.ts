@@ -30,7 +30,7 @@ export class Reconcile extends WorkflowEntrypoint<Env, { mode?: Mode }> {
         changedPaths: (a, b) => notes.changedPaths(a, b),
       },
       index: {
-        manifest: async () => (await env.DB.prepare("SELECT path, sha FROM manifest").all<{ path: string; sha: string }>()).results,
+        manifest: async () => (await env.DB.prepare("SELECT path, sha, chunks FROM manifest").all<{ path: string; sha: string; chunks: number }>()).results,
         keywordPaths: async () => (await env.DB.prepare("SELECT DISTINCT path FROM chunks_fts").all<{ path: string }>()).results.map((r) => r.path),
         vectorPathHashes: () => vectorPathHashes(env.CF_ACCOUNT_ID, env.VECTORIZE_INDEX, env.CF_API_TOKEN),
       },

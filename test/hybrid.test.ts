@@ -1,7 +1,7 @@
 import { applyD1Migrations, type D1Migration } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildFtsQuery, fuse, type Hit } from "../src/search/hybrid";
+import { buildFtsQuery, fuse, semanticHits, type Hit } from "../src/search/hybrid";
 
 describe("buildFtsQuery", () => {
   it("quotes each word as a prefix and joins with OR", () => {
@@ -22,8 +22,26 @@ describe("buildFtsQuery", () => {
     expect(buildFtsQuery("   ")).toBeNull();
   });
 
+  it("keeps letters outside a-z (ø, ł) inside words, like the index does", () => {
+    expect(buildFtsQuery("Søren Łódź")).toBe('"søren"* OR "łodz"*');
+  });
+
   it("keeps accents out of the query (the index ignores them)", () => {
     expect(buildFtsQuery("decisão café")).toBe('"decisao"* OR "cafe"*');
+  });
+});
+
+describe("semanticHits", () => {
+  it("keeps matches above the similarity floor and maps their metadata", () => {
+    const matches = [
+      { id: "h-0", score: 0.8, metadata: { path: "a.md", seq: 0, text: "alpha" } },
+      { id: "h-1", score: 0.3, metadata: { path: "b.md", seq: 1, text: "weak" } },
+    ];
+    expect(semanticHits(matches as any, 0.45)).toEqual([{ path: "a.md", seq: 0, text: "alpha" }]);
+  });
+
+  it("drops vectors without a path instead of returning a path 'undefined'", () => {
+    expect(semanticHits([{ id: "x", score: 0.9, metadata: {} }] as any, 0.45)).toEqual([]);
   });
 });
 

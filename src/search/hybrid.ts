@@ -19,10 +19,17 @@ const STOPWORDS = new Set(
 /** Turns free text into a safe FTS5 query, or null if nothing is left to search for. */
 export function buildFtsQuery(query: string): string | null {
   const terms = norm(query)
-    .split(/[^a-z0-9]+/) // anything else (quotes, operators, colons, parentheses) separates words
+    .split(/[^\p{L}\p{N}]+/u) // like the index's tokenizer: letters and digits make words; quotes, operators, colons separate them
     .filter((t) => t.length >= MIN_TERM && !STOPWORDS.has(t));
   const unique = [...new Set(terms)];
   return unique.length ? unique.map((t) => `"${t}"*`).join(" OR ") : null;
+}
+
+/** Vectorize matches above the similarity floor, as hits; vectors without a path are dropped. */
+export function semanticHits(matches: { score: number; metadata?: Record<string, unknown> }[], floor: number): Hit[] {
+  return matches
+    .filter((m) => m.score >= floor && typeof m.metadata?.path === "string")
+    .map((m) => ({ path: m.metadata!.path as string, seq: Number(m.metadata!.seq ?? 0), text: String(m.metadata!.text ?? "") }));
 }
 
 /** Reciprocal rank fusion: Σ 1/(60 + rank) per chunk; a note scores its best chunk. */

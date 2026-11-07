@@ -10,7 +10,7 @@ import { ArtifactsNotes, D1Keywords, D1Manifest, VectorizeAdapter, WorkersAiEmbe
 import { handle } from "./indexer/indexer";
 import type { Deps, IndexMessage, QueueMessage } from "./indexer/types";
 import { checkPath, ideaPath, withSuffix } from "./lib/notes";
-import { buildFtsQuery, fuse, type Hit } from "./search/hybrid";
+import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 
 // semantic results below this cosine similarity are dropped, so a query with no real match can
 // return nothing (ADR 012; tune against real queries)
@@ -144,21 +144,23 @@ function createServer() {
     },
     async ({ query, limit }) => {
       const fts = buildFtsQuery(query);
+      // each half degrades on its own: one failing still returns the other, and says so
       const [keyword, semantic] = await Promise.all([
-        fts
+        (fts
           ? E.DB.prepare("SELECT path, seq, text FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT 50").bind(fts).all<Hit>().then((r) => r.results)
-          : Promise.resolve([] as Hit[]),
+          : Promise.resolve([] as Hit[])
+        ).catch((e) => (console.error(JSON.stringify({ keywordSearchFailed: String(e) })), null)),
         (async () => {
           const [q] = await embedder().embed([query]);
           const res = await E.VECTORS.query(q, { topK: 50, returnMetadata: "all" });
-          return res.matches
-            .filter((m) => m.score >= SEMANTIC_FLOOR)
-            .map((m) => ({ path: String(m.metadata?.path), seq: Number(m.metadata?.seq), text: String(m.metadata?.text ?? "") }));
+          return semanticHits(res.matches, SEMANTIC_FLOOR);
         })().catch((e) => (console.error(JSON.stringify({ semanticSearchFailed: String(e) })), null)),
       ]);
-      const results = fuse(keyword, semantic ?? [], limit ?? 10);
+      if (keyword === null && semantic === null) return text("Search is unavailable right now. Try again in a moment.");
+      const results = fuse(keyword ?? [], semantic ?? [], limit ?? 10);
       const lines = results.map((r) => `${r.path} (${r.matched})\n${r.text.slice(0, 400)}`);
-      const note = semantic === null ? "\n\n(semantic search unavailable right now: keyword results only)" : "";
+      const note =
+        semantic === null ? "\n\n(semantic search unavailable right now: keyword results only)" : keyword === null ? "\n\n(keyword search unavailable right now: semantic results only)" : "";
       return text((lines.join("\n\n---\n\n") || "Nothing found.") + note);
     },
   );
