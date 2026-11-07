@@ -27,6 +27,7 @@ interface Env {
   NOTES_REPO: string;
   MCP_TOKEN: string;
   ADMIN_SECRET: string;
+  HOOK_SECRET: string;
 }
 const E = env as unknown as Env;
 
@@ -209,7 +210,7 @@ function createServer() {
 const mcp = createMcpHandler(createServer);
 
 // Admin routes use `Authorization: Bearer <ADMIN_SECRET>`, never a URL (spec v2 §2).
-async function isAdmin(request: Request, secret: string) {
+async function hasBearer(request: Request, secret: string) {
   if (!secret) return false;
   // compare digests in constant time, so response timing reveals nothing about the secret
   const digest = async (s: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
@@ -221,9 +222,10 @@ export default {
   async fetch(request: Request, envArg: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    // a 1-hour write token for the notes repo, for the Mac's sync hook (ADR 007)
-    if (url.pathname === "/admin/artifacts-token" && request.method === "POST") {
-      if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
+    // a 1-hour write token for the notes repo, for the Mac's sync hook (ADR 007). Its own secret,
+    // which can do nothing else: a leak from the Mac can't reach the admin routes (#39).
+    if (url.pathname === "/hook/artifacts-token" && request.method === "POST") {
+      if (!(await hasBearer(request, envArg.HOOK_SECRET))) return new Response("Not found", { status: 404 });
       using repo = await envArg.ARTIFACTS.get(envArg.NOTES_REPO);
       const [info, tok] = await Promise.all([repo.info(), repo.createToken("write", 3600)]);
       return Response.json({ remote: info.remote, token: tok.plaintext.split("?")[0], expiresAt: tok.expiresAt }, { headers: { "Cache-Control": "no-store" } });
@@ -231,7 +233,7 @@ export default {
 
     // starts a reconciliation (default) or a full rebuild (?mode=rebuild); returns the instance id
     if (url.pathname === "/admin/reconcile" && request.method === "POST") {
-      if (!(await isAdmin(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
+      if (!(await hasBearer(request, envArg.ADMIN_SECRET))) return new Response("Not found", { status: 404 });
       const mode = url.searchParams.get("mode") === "rebuild" ? "rebuild" : "daily";
       const instance = await envArg.RECONCILE.create({ id: `manual-${mode}-${crypto.randomUUID()}`, params: { mode } });
       return Response.json({ id: instance.id, mode }, { status: 202 });

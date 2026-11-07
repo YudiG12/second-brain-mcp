@@ -9,7 +9,13 @@ class OperationError extends Error {
 }
 
 /** Turns an operation into file changes, reading the working copy. Throws OperationError if it can't apply. */
-async function changesFor(op: Operation, read: (path: string) => Promise<string | null>): Promise<Change[]> {
+async function changesFor(op: Operation, read: (path: string) => Promise<string | null>, caseTwin: (path: string) => Promise<string | null>): Promise<Change[]> {
+  // macOS keeps names case-insensitive: Nota.md and nota.md would be one file on the Mac's clone
+  const target = op.kind === "move" ? op.to : op.kind === "write" || op.kind === "create" ? op.path : null;
+  if (target) {
+    const twin = await caseTwin(target);
+    if (twin && !(op.kind === "move" && twin === op.from)) throw new OperationError(`${twin} already exists; note names can't differ only in case`);
+  }
   switch (op.kind) {
     case "write":
       return [{ path: op.path, content: op.content }];
@@ -64,7 +70,7 @@ export class Writer {
       let commit: string;
       try {
         if (!this.copy.ready()) await this.copy.sync();
-        changes = await changesFor(op, (p) => this.copy.read(p));
+        changes = await changesFor(op, (p) => this.copy.read(p), (p) => this.copy.caseTwin(p));
         commit = await this.copy.commit(changes, message(op));
       } catch (e) {
         if (!(e instanceof OperationError)) this.copy.drop(); // the copy may be half-written; nothing was committed if it's an OperationError

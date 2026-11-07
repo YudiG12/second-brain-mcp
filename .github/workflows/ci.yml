@@ -29,6 +29,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Sync hook tests
+        run: bash test/hook/run.sh
       - name: Publish the Vitest UI report
         id: ui
         # public URL with the test code; accepted risk while the repo is private (it will be public)

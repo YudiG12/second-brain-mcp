@@ -81,6 +81,14 @@ describe("Writer: operations", () => {
     expect(remote.files()["a.md"]).toBe("alpha\n\nbeta\n");
   });
 
+  it("refuses a name that differs from an existing note only in case (macOS shares one file)", async () => {
+    expect(await writer.run({ kind: "write", path: "A.md", content: "x" })).toMatchObject({ status: "failed" });
+    expect(await writer.run({ kind: "create", path: "B.MD", content: "x" })).toMatchObject({ status: "failed" });
+    expect(await writer.run({ kind: "move", from: "a.md", to: "B.md" })).toMatchObject({ status: "failed" });
+    expect(await writer.run({ kind: "write", path: "a.md", content: "same name is fine" })).toMatchObject({ status: "ok" });
+    expect(await writer.run({ kind: "move", from: "a.md", to: "A.md" })).toMatchObject({ status: "ok" }); // renaming its own case
+  });
+
   it("refuses to move onto an existing note", async () => {
     expect(await writer.run({ kind: "move", from: "a.md", to: "b.md" })).toMatchObject({ status: "failed" });
     expect(remote.history()).toHaveLength(0);

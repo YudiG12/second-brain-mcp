@@ -49,7 +49,7 @@ The MCP specification defines OAuth 2.1 for remote servers, and the clients used
 - **A stolen, logged-in device still has access** until the account is signed out or the grant revoked: OAuth makes revocation possible, not automatic.
 - **Revocation is not instant everywhere:** KV is eventually consistent, so a revoked token can keep working for up to about a minute in other locations.
 - **A consent click on every new connection.**
-- **The admin secret on the Mac can revoke grants** until [#39](https://github.com/YudiG12/second-brain-mcp/issues/39) lands.
+- ~~The admin secret on the Mac can revoke grants~~: resolved by [#39](https://github.com/YudiG12/second-brain-mcp/issues/39); the Mac holds only a hook secret.
 - **More moving parts to test:** the login flow, refresh, and the single-user check.
 
 ## Revisit when
