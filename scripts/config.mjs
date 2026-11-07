@@ -2,12 +2,14 @@
 // Prints one setting of this deployment, read from wrangler.jsonc: the single place to edit when
 // you deploy your own copy. Used by the scripts and CI.
 //   node scripts/config.mjs <key>
-// Keys: account_id, name, namespace (Artifacts), d1, queue, dlq, any var (PUBLIC_URL, …), and
+//   node scripts/config.mjs set <key> <value>   (name, account_id, d1_id, kv_id, PUBLIC_URL, CF_ACCOUNT_ID,
+//                                              OWNER_GITHUB_ID, GITHUB_CLIENT_ID; keeps comments)
+// Keys: account_id, name, namespace (Artifacts), d1, d1_id, kv_id, queue, dlq, any var (PUBLIC_URL, …), and
 // subdomain / worker, derived from PUBLIC_URL, which must be https://<worker>.<subdomain>.workers.dev
 // (custom domains aren't supported by the scripts). `check` exits non-zero unless the Worker name
 // matches PUBLIC_URL and CF_ACCOUNT_ID matches account_id.
 // WRANGLER_CONFIG points at another file (tests).
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const file = process.env.WRANGLER_CONFIG ?? fileURLToPath(new URL("../wrangler.jsonc", import.meta.url));
@@ -41,7 +43,8 @@ function stripJsonc(src) {
 }
 
 const die = (msg) => { console.error(`config: ${msg}`); process.exit(1); };
-const key = process.argv[2] ?? die("usage: node scripts/config.mjs <key>");
+if (process.argv[2] === "set") setValue(process.argv[3], process.argv[4]);
+const key = process.argv[2] ?? die("usage: node scripts/config.mjs <key> | set <key> <value>");
 let cfg;
 try { cfg = JSON.parse(stripJsonc(readFileSync(file, "utf8"))); } catch (e) { die(`can't read ${file}: ${e.message}`); }
 const vars = cfg.vars ?? {};
@@ -61,11 +64,36 @@ function check() {
   return "ok";
 }
 
+/** `set <key> <value>`: rewrites one value in place, keeping comments and layout, then checks it. */
+function setValue(k, v) {
+  if (!k || v === undefined) die("usage: node scripts/config.mjs set <key> <value>");
+  if (/["\\\n]/.test(v)) die(`refusing a value with a quote, backslash or newline: ${k}`);
+  const where = { // [section to search after, field name, how to read it back]
+    name: [null, "name", (c) => c.name],
+    account_id: [null, "account_id", (c) => c.account_id],
+    d1_id: ['"d1_databases"', "database_id", (c) => c.d1_databases?.[0]?.database_id],
+    kv_id: ['"kv_namespaces"', "id", (c) => c.kv_namespaces?.[0]?.id],
+  }[k] ?? (["PUBLIC_URL", "CF_ACCOUNT_ID", "OWNER_GITHUB_ID", "GITHUB_CLIENT_ID"].includes(k) ? ['"vars"', k, (c) => c.vars?.[k]] : die(`can't set ${k}`));
+  const [after, field, read] = where;
+  const src = readFileSync(file, "utf8");
+  const from = after ? src.indexOf(after) : 0;
+  if (from < 0) die(`no ${after} in ${file}`);
+  const re = new RegExp(`("${field}"\\s*:\\s*)"[^"\\n]*"`, "g");
+  re.lastIndex = from;
+  const m = re.exec(src) ?? die(`no "${field}" in ${file}`);
+  const out = src.slice(0, m.index) + m[1] + JSON.stringify(v) + src.slice(m.index + m[0].length);
+  if (read(JSON.parse(stripJsonc(out))) !== v) die(`writing ${k} changed the wrong value; edit ${file} by hand`);
+  writeFileSync(file, out);
+  process.exit(0);
+}
+
 const derived = {
   account_id: () => cfg.account_id,
   name: () => cfg.name,
   namespace: () => cfg.artifacts?.[0]?.namespace,
   d1: () => cfg.d1_databases?.[0]?.database_name,
+  d1_id: () => cfg.d1_databases?.[0]?.database_id,
+  kv_id: () => cfg.kv_namespaces?.[0]?.id,
   queue: () => cfg.queues?.producers?.[0]?.queue,
   dlq: () => cfg.queues?.consumers?.[0]?.dead_letter_queue,
   subdomain: () => host()[2],

@@ -1,5 +1,7 @@
 # Setup
 
+`npm run deploy-your-own` runs every step below, in order. This page is the manual path and the reference for what the script does.
+
 How to recreate the infrastructure from this repo ([ADR 006](adr/006-wrangler-and-a-setup-script-instead-of-terraform.md)).
 
 Everything that changes per deployment is in `wrangler.jsonc`: `name`, `account_id`, `vars` (`PUBLIC_URL`, `CF_ACCOUNT_ID`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID`), and the D1 and KV ids that `scripts/setup.sh` asks for. The scripts read it through `scripts/config.mjs`; `node scripts/config.mjs check` validates it.
@@ -11,7 +13,7 @@ Everything that changes per deployment is in `wrangler.jsonc`: `name`, `account_
 ## Steps
 Order matters: the notes must be in Artifacts before any deploy that reads from it, or the server lists no notes and the first MCP write starts a separate history.
 
-1. **Resources:** `scripts/setup.sh`. Creates what is missing (Vectorize index, Artifacts repo `notes`, D1 database and its migrations, the `index-jobs` queues and the Artifacts push subscription) and is safe to run again. A new D1 database prints an id that goes in `wrangler.jsonc`. Changing an existing Workers subdomain is a dashboard step; the script stops and says so.
+1. **Resources:** `scripts/setup.sh`. Creates what is missing (Vectorize index, Artifacts repo `notes`, D1 database and its migrations, the `index-jobs` queues and the Artifacts push subscription) and is safe to run again. It writes the D1 and KV ids into `wrangler.jsonc` itself. Changing an existing Workers subdomain is a dashboard step; the script stops and says so.
 2. **Notes:** push the full history into the Artifacts repo once, from a clone: `git push <remote> main`, with a token from `npx wrangler artifacts repos issue-token "$(node scripts/config.mjs NOTES_REPO)" --namespace "$(node scripts/config.mjs namespace)" --scope write`. Then point the Mac clone at it: `git remote set-url origin <remote>`.
 3. **Deploy:** `npx wrangler deploy` the first time (the Worker must exist before it has secrets). After that, merges to `main` deploy through CI.
 4. **Secrets:**

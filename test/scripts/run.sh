@@ -49,6 +49,18 @@ sed -i.bak 's#"name": "other"#"name": "my-brain"#; s#"CF_ACCOUNT_ID": "abc123"#"
 check "check fails when CF_ACCOUNT_ID differs from account_id" '! get check >/dev/null && grep -q "CF_ACCOUNT_ID" "$T/err"'
 sed -i.bak 's#https://my-brain.alice.workers.dev#not a url#' "$T/w.jsonc"
 check "an invalid PUBLIC_URL fails with a message, not a stack trace" '! get subdomain >/dev/null && grep -q "^config:" "$T/err" && ! grep -q "    at " "$T/err"'
+echo "set: writes values, keeps comments"
+cp "$ROOT/wrangler.jsonc" "$T/w.jsonc"
+put() { WRANGLER_CONFIG="$T/w.jsonc" node "$CFG" set "$1" "$2" 2>"$T/err"; }
+check "name" 'put name brain && [ "$(get name)" = brain ]'
+check "account_id and CF_ACCOUNT_ID" 'put account_id acc9 && put CF_ACCOUNT_ID acc9 && [ "$(get account_id) $(get CF_ACCOUNT_ID)" = "acc9 acc9" ]'
+check "PUBLIC_URL, then the derived subdomain follows" 'put PUBLIC_URL https://brain.bob.workers.dev && [ "$(get subdomain)" = bob ]'
+check "OWNER_GITHUB_ID and GITHUB_CLIENT_ID" 'put OWNER_GITHUB_ID 77 && put GITHUB_CLIENT_ID Ov23abc && [ "$(get OWNER_GITHUB_ID) $(get GITHUB_CLIENT_ID)" = "77 Ov23abc" ]'
+check "the D1 and KV ids" 'put d1_id d1-uuid && put kv_id kv-id && [ "$(get d1_id) $(get kv_id)" = "d1-uuid kv-id" ]'
+check "other settings and the comments survive" '[ "$(get NOTES_REPO)" = notes ] && [ "$(grep -c "//" "$T/w.jsonc")" = "$(grep -c "//" "$ROOT/wrangler.jsonc")" ]'
+check "after all of it, check passes" 'get check >/dev/null'
+check "an unknown key fails" '! put nope x'
+check "a value with a quote is refused" '! put name "a\"b"'
 echo "the repo's own config"
 check "parses" 'node "$CFG" PUBLIC_URL >/dev/null'
 

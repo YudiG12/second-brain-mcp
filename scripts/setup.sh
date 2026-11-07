@@ -38,17 +38,14 @@ else
 fi
 
 echo "== D1 database $DB"
-if wr d1 info "$DB" >/dev/null 2>&1; then echo "ok: exists"; else
-  wr d1 create "$DB"
-  echo "ACTION: put the database_id printed above in wrangler.jsonc, then run this script again."; exit 1
-fi
+wr d1 info "$DB" >/dev/null 2>&1 && echo "ok: exists" || { wr d1 create "$DB" >/dev/null && echo "ok: created"; }
+cfg set d1_id "$(wr d1 info "$DB" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).uuid))')"
 wr d1 migrations apply "$DB" --remote >/dev/null && echo "ok: migrations applied"
 
 echo "== KV namespace OAUTH_KV"
-if wr kv namespace list 2>/dev/null | grep -q '"title": "OAUTH_KV"\|second-brain-mcp-OAUTH_KV'; then echo "ok: exists"; else
-  wr kv namespace create OAUTH_KV
-  echo "ACTION: put the id printed above in wrangler.jsonc (kv_namespaces), then run this script again."; exit 1
-fi
+kv_id() { wr kv namespace list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const n=JSON.parse(s).find(n=>n.title==="OAUTH_KV"||n.title.endsWith("-OAUTH_KV"));console.log(n?n.id:"")})'; }
+[ -n "$(kv_id)" ] && echo "ok: exists" || { wr kv namespace create OAUTH_KV >/dev/null && echo "ok: created"; }
+cfg set kv_id "$(kv_id)"
 
 echo "== Queues"
 for q in "$QUEUE" "$DLQ"; do
