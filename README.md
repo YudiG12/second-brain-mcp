@@ -17,6 +17,12 @@ git clone https://github.com/YudiG12/second-brain-mcp && cd second-brain-mcp
 npm ci && npm run deploy-your-own
 ```
 
+Or ask your AI coding agent:
+
+```txt
+Clone https://github.com/YudiG12/second-brain-mcp and deploy it for me, following its AGENTS.md.
+```
+
 Optional, sync a local clone on your Mac:
 
 ```sh
