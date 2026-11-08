@@ -8,17 +8,18 @@ The person wants their own Second Brain MCP on their Cloudflare account. Run the
 
 ```sh
 npm ci
-npm run deploy-your-own -- --name <worker-name> --notes starter
+npm run deploy-your-own -- --name <worker-name> --github-user <login> --notes starter
 ```
 
-- Ask the person for the Worker name (suggest `second-brain-mcp`) and whether to start with a starter note or push a notes folder (`--notes <path>`).
+- Ask the person for the Worker name (suggest `second-brain-mcp`), their GitHub username (needed unless `gh` is signed in) and whether to start with a starter note or push a notes folder (`--notes <path>`).
 - When the installer prints a `NEEDS:` line and exits 2, relay that line to the person in plain words, wait, then re-run with the same flags plus anything new (`--client-id`, `--github-user`, `--account`, `--subdomain`).
 - Three steps are the person's, never yours:
   1. **Cloudflare sign-in:** they run `npx wrangler login` in their terminal and approve in the browser.
   2. **GitHub OAuth app:** they create it with the three values the installer prints and tell you the Client ID.
   3. **Client secret:** they run `npx wrangler secret put GITHUB_CLIENT_SECRET` in their own terminal and paste it into Wrangler's hidden prompt. **Never ask for the secret in chat, never read it from the clipboard, never pass it as an argument or write it to a file.**
 - The plan must be Workers Paid (Artifacts requires it). If a step fails with a plan error, tell the person.
-- When it finishes, it prints the MCP URL. Connect it (`claude mcp add --transport http second-brain <PUBLIC_URL>/mcp`), let the person sign in with GitHub, then check: save a test idea, search for it, delete it.
+- When it finishes, it prints the MCP URL. Connect it (`claude mcp add -s user --transport http <worker-name> <PUBLIC_URL>/mcp`), let the person sign in with GitHub, then check: save a test idea, search for it, delete it. Search by meaning takes a minute or two to see a new note; keyword search is immediate.
+- No Homebrew or sudo (a second user on a Mac): install Node 24 with nvm, fnm or the nodejs.org tarball under the home folder and prefix `PATH` in every command, `npx wrangler login` included.
 - Optional, on a Mac: `npm run mac-hook` (asks where to keep the notes clone; in a non-interactive run, tell the person to run it in their terminal).
 
 ## Working on the code

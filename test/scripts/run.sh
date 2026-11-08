@@ -64,12 +64,16 @@ check "a value with a quote is refused" '! put name "a\"b"'
 check "an empty value is refused" '! put GITHUB_CLIENT_ID ""'
 
 echo "rename: every resource name follows the deployment's name"
+get_orig() { for k in d1 namespace queue dlq; do WRANGLER_CONFIG="$ROOT/wrangler.jsonc" node "$CFG" $k; done | paste -sd"|" -; }
 cp "$ROOT/wrangler.jsonc" "$T/w.jsonc"
 WRANGLER_CONFIG="$T/w.jsonc" node "$CFG" rename brain-test 2>"$T/err"
 check "D1, Vectorize, Artifacts namespace" '[ "$(get d1) $(get VECTORIZE_INDEX) $(get namespace)" = "brain-test brain-test brain-test" ]'
 check "the Vectorize binding follows VECTORIZE_INDEX" 'grep -q "\"index_name\": \"brain-test\"" "$T/w.jsonc"'
 check "queue and dead-letter queue, in producer and both consumers" '[ "$(get queue) $(get dlq)" = "brain-test-index-jobs brain-test-index-jobs-dlq" ] && [ "$(grep -o "brain-test-index-jobs" "$T/w.jsonc" | wc -l | tr -d " ")" = 4 ] && ! grep -q "\"index-jobs" "$T/w.jsonc"'
 check "comments survive" '[ "$(grep -c "//" "$T/w.jsonc")" = "$(grep -c "//" "$ROOT/wrangler.jsonc")" ]'
+check "the workflow, whose name is global to the account" 'grep -q "\"name\": \"brain-test-reconcile\"" "$T/w.jsonc"'
+check "no account-wide name of the original deployment is left (D1, Vectorize, namespace, queues, workflow)" '! grep -qE "\"(database_name|index_name|namespace|queue|dead_letter_queue|VECTORIZE_INDEX)\": \"($(get_orig))\"" "$T/w.jsonc" && ! grep -q "\"name\": \"reconcile\"" "$T/w.jsonc"'
+check "the D1 id, the OAuth KV id and the GitHub client ID are reset: they belong to the original" '[ "$(get d1_id) $(get kv_id) $(get GITHUB_CLIENT_ID)" = "none-yet none-yet none-yet" ]'
 check "a bad name is refused" '! WRANGLER_CONFIG="$T/w.jsonc" node "$CFG" rename "Bad Name" 2>/dev/null'
 
 echo "merge-hooks: adds the sync hooks to Claude Code settings"
@@ -89,6 +93,15 @@ echo "deploy-your-own without a terminal (an agent running it)"
 mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 1\n' > "$T/bin/npx"; chmod +x "$T/bin/npx"
 out=$(PATH="$T/bin:$PATH" bash "$ROOT/scripts/deploy-your-own.sh" --name x </dev/null 2>&1); code=$?
 check "not signed in: exits 2 with a NEEDS line, never waits" '[ $code = 2 ] && printf "%s" "$out" | grep -q "^NEEDS: .*wrangler login"'
+printf '#!/bin/sh\ncase "$*" in *whoami*) echo "{\\"email\\":\\"a@b\\",\\"accounts\\":[{\\"id\\":\\"acc\\",\\"name\\":\\"A\\"}]}";; *"auth token"*) echo "{\\"token\\":\\"t\\"}";; *) exit 1;; esac\n' > "$T/bin/npx"
+printf '#!/bin/sh\ncat >/dev/null; echo "{\\"result\\":{\\"subdomain\\":\\"alice\\"}}"\n' > "$T/bin/curl"; printf '#!/bin/sh\nexit 1\n' > "$T/bin/gh"; chmod +x "$T/bin/curl" "$T/bin/gh"
+cp "$ROOT/wrangler.jsonc" "$T/before.jsonc"
+out=$(PATH="$T/bin:$PATH" bash "$ROOT/scripts/deploy-your-own.sh" --name x </dev/null 2>&1); code=$?
+check "a missing flag behind \$(ask ...): the NEEDS line still shows and it exits 2" '[ $code = 2 ] && printf "%s" "$out" | grep -q "^NEEDS: --github-user"'
+check "and it stopped before touching wrangler.jsonc" 'cmp -s "$T/before.jsonc" "$ROOT/wrangler.jsonc"'
+rm -f "$T/bin/curl" "$T/bin/gh"
+check "the closing hint uses the Worker name and user scope" 'grep -q "claude mcp add -s user --transport http %s" "$ROOT/scripts/deploy-your-own.sh"'
+check "setup.sh passes every argument to config.mjs" 'grep -q "^cfg() { node scripts/config.mjs \"\$@\"; }" "$ROOT/scripts/setup.sh"'
 check "an unknown option is refused" '! bash "$ROOT/scripts/deploy-your-own.sh" --nope 1 </dev/null >/dev/null 2>&1'
 
 echo "the repo's own config"

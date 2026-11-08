@@ -2,7 +2,8 @@
 // Prints one setting of this deployment, read from wrangler.jsonc: the single place to edit when
 // you deploy your own copy. Used by the scripts and CI.
 //   node scripts/config.mjs <key>
-//   node scripts/config.mjs rename <base>      (names the D1, Vectorize, Artifacts namespace and queues after <base>)
+//   node scripts/config.mjs rename <base>      (names the D1, Vectorize, Artifacts namespace, queues and workflow
+//                                              after <base>, and resets the D1/KV ids and GitHub client ID)
 //   node scripts/config.mjs set <key> <value>   (name, account_id, d1_id, kv_id, PUBLIC_URL, CF_ACCOUNT_ID,
 //                                              OWNER_GITHUB_ID, GITHUB_CLIENT_ID; keeps comments)
 // Keys: account_id, name, namespace (Artifacts), d1, d1_id, kv_id, queue, dlq, any var (PUBLIC_URL, …), and
@@ -90,8 +91,11 @@ function setValue(k, v) {
   process.exit(0);
 }
 
-/** `rename <base>`: names the D1 database, Vectorize index, Artifacts namespace and queues after
- * <base>, so two deployments in one account never share a resource. Keeps comments. */
+/** `rename <base>`: names every resource whose name is global to the account (D1 database, Vectorize
+ * index, Artifacts namespace, queues, workflow) after <base>, so two deployments in one account never
+ * share one; a shared workflow name silently moves the other Worker's workflow to this one on deploy.
+ * The D1 and KV ids and the GitHub client ID belong to the original deployment, so they are reset to
+ * "none-yet" (setup.sh finds or creates this deployment's own). Keeps comments. */
 function rename(base) {
   if (!/^[a-z0-9][a-z0-9-]{1,40}$/.test(base ?? "")) die("usage: rename <base> (lowercase letters, digits and dashes)");
   let src = readFileSync(file, "utf8");
@@ -108,10 +112,26 @@ function rename(base) {
   swap("queue", dlq, `${base}-index-jobs-dlq`); // the dead-letter queue first: its name contains the queue's
   swap("dead_letter_queue", dlq, `${base}-index-jobs-dlq`);
   swap("queue", q, `${base}-index-jobs`);
+  const wf = c.workflows?.[0]?.name;
+  if (wf !== undefined) src = src.replace(new RegExp(`("workflows"[\\s\\S]*?"name"\\s*:\\s*)"${wf}"`), `$1${JSON.stringify(`${base}-reconcile`)}`);
+  const reset = (after, field) => {
+    const from = src.indexOf(after);
+    if (from < 0) return;
+    const re = new RegExp(`("${field}"\\s*:\\s*)"[^"\\n]*"`, "g");
+    re.lastIndex = from;
+    const m = re.exec(src);
+    if (m) src = src.slice(0, m.index) + m[1] + '"none-yet"' + src.slice(m.index + m[0].length);
+  };
+  reset('"d1_databases"', "database_id");
+  reset('"kv_namespaces"', "id");
+  reset('"vars"', "GITHUB_CLIENT_ID");
   const n = JSON.parse(stripJsonc(src));
   const okNow = n.vectorize?.[0]?.index_name === base && n.vars?.VECTORIZE_INDEX === base && n.artifacts?.[0]?.namespace === base &&
     n.d1_databases?.[0]?.database_name === base && n.queues?.producers?.[0]?.queue === `${base}-index-jobs` &&
-    n.queues?.consumers?.every((x) => x.queue.startsWith(`${base}-index-jobs`)) && n.queues?.consumers?.[0]?.dead_letter_queue === `${base}-index-jobs-dlq`;
+    n.queues?.consumers?.every((x) => x.queue.startsWith(`${base}-index-jobs`)) && n.queues?.consumers?.[0]?.dead_letter_queue === `${base}-index-jobs-dlq` &&
+    (wf === undefined || n.workflows?.[0]?.name === `${base}-reconcile`) &&
+    [n.d1_databases?.[0]?.database_id, n.kv_namespaces?.[0]?.id, n.vars?.GITHUB_CLIENT_ID].every((v) => v === undefined || v === "none-yet") &&
+    n.name === c.name;
   if (!okNow) die(`rename left ${file} inconsistent; nothing written`);
   writeFileSync(file, src);
   process.exit(0);

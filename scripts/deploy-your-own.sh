@@ -29,7 +29,9 @@ json() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const 
 step() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 ok() { printf '  ✓ %s\n' "$*"; }
 die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
-need() { printf 'NEEDS: %s\n' "$*"; exit 2; }   # for agents: what to ask the person, then re-run
+# for agents: what to ask the person, then re-run. On stderr, because `ask` runs inside $(...), where
+# stdout is the answer; callers add `|| exit $?` so the exit 2 leaves the script, not only the subshell.
+need() { printf 'NEEDS: %s\n' "$*" >&2; exit 2; }
 # ask <prompt> <default> <flag>: the flag's value, else a terminal prompt, else the default, else NEEDS
 ask() {
   local a=""
@@ -63,14 +65,18 @@ fi
 ACCOUNT=$(printf '%s' "$who" | json "j.accounts[$i-1].id")
 ok "signed in as $(printf '%s' "$who" | json j.email), account $ACCOUNT"
 SUB=$(api "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/subdomain" | json 'j.result&&j.result.subdomain')
-[ -n "$SUB" ] || SUB=${A_SUB:-$(ask "Pick a workers.dev subdomain (yourname.workers.dev)" "" --subdomain)}
+[ -n "$SUB" ] || SUB=$A_SUB
+[ -n "$SUB" ] || SUB=$(ask "Pick a workers.dev subdomain (yourname.workers.dev)" "" --subdomain) || exit $?
 [ -n "$SUB" ] || die "a subdomain is needed"
 ok "subdomain: $SUB.workers.dev"
 
 step "2/7 Your settings"
-NAME=${A_NAME:-$(ask "Worker name" "$(cfg name)" --name)}
+NAME=$A_NAME; [ -n "$NAME" ] || NAME=$(ask "Worker name" "$(cfg name)" --name) || exit $?
 if gh api user --jq .id >/dev/null 2>&1; then GH_ID=$(gh api user --jq .id); GH_USER=$(gh api user --jq .login)
-else GH_USER=${A_GH:-$(ask "Your GitHub username" "" --github-user)}; GH_ID=$(curl -fsS "https://api.github.com/users/$GH_USER" | json j.id); fi
+else
+  GH_USER=$A_GH; [ -n "$GH_USER" ] || GH_USER=$(ask "Your GitHub username" "" --github-user) || exit $?
+  GH_ID=$(curl -fsS "https://api.github.com/users/$GH_USER" | json j.id)
+fi
 [ -n "$GH_ID" ] || die "couldn't find the GitHub user $GH_USER"
 URL="https://$NAME.$SUB.workers.dev"
 # a new deployment (another name or account) gets its own D1, index, notes and queues
@@ -86,9 +92,15 @@ step "4/7 Notes"
 REPO=$(cfg NOTES_REPO); NS=$(cfg namespace)
 repo=$(wr artifacts repos get "$REPO" --namespace "$NS" --json)
 REMOTE=$(printf '%s' "$repo" | json '(j.result||j).remote')
-if [ -n "$(printf '%s' "$repo" | json '(j.result||j).last_push_at')" ]; then ok "already has notes"
+TOKEN=$(wr artifacts repos issue-token "$REPO" --namespace "$NS" --scope write --ttl 600 --json | json j.plaintext)
+[ -n "$TOKEN" ] || die "couldn't get a token for $NS/$REPO"
+git_auth() { GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $TOKEN" git "$@"; }
+# the repo itself says whether it has notes: Artifacts' last_push_at stays null after a push
+heads=$(git_auth ls-remote "$REMOTE" refs/heads/main) || die "couldn't read $REMOTE"
+if [ -n "$heads" ]; then ok "already has notes"
 else
-  DIR=${A_NOTES:-$(ask "Folder with your Markdown notes (Enter for a starter note)" starter --notes)}; DIR=${DIR/#\~/$HOME}
+  DIR=$A_NOTES; [ -n "$DIR" ] || DIR=$(ask "Folder with your Markdown notes (Enter for a starter note)" starter --notes) || exit $?
+  DIR=${DIR/#\~/$HOME}
   [ "$DIR" = starter ] && DIR=""
   if [ -z "$DIR" ]; then
     tmp=$(mktemp -d); DIR=$tmp
@@ -104,9 +116,7 @@ else
     git -C "$DIR" add -A
     git -C "$DIR" -c commit.gpgsign=false -c user.name="${GIT_AUTHOR_NAME:-$GH_USER}" -c user.email="${GIT_AUTHOR_EMAIL:-$GH_ID+$GH_USER@users.noreply.github.com}" commit -qm "First notes"
   fi
-  TOKEN=$(wr artifacts repos issue-token "$REPO" --namespace "$NS" --scope write --ttl 600 --json | json j.plaintext)
-  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $TOKEN" \
-    git -C "$DIR" push -q "$REMOTE" HEAD:main
+  git_auth -C "$DIR" push -q "$REMOTE" HEAD:main
   if [ -n "$tmp" ]; then ok "pushed a starter note"; else ok "pushed $(git -C "$DIR" ls-files | wc -l | tr -d ' ') files from $DIR"; fi
 fi
 
@@ -114,7 +124,7 @@ step "5/7 GitHub sign-in app"
 HAS_SECRET=""; wr secret list 2>/dev/null | grep -q GITHUB_CLIENT_SECRET && HAS_SECRET=1
 NEW_APP=""
 if [ -n "$A_CID" ]; then NEW_APP=$A_CID
-elif [ -n "$HAS_SECRET" ] && yes "Keep the current GitHub OAuth app?" y; then ok "kept"
+elif [ -n "$HAS_SECRET" ] && [ "$(cfg GITHUB_CLIENT_ID)" != none-yet ] && yes "Keep the current GitHub OAuth app?" y; then ok "kept"
 else
   echo "  A person creates a GitHub OAuth app at https://github.com/settings/applications/new with:"
   echo "    Application name:            Second Brain MCP"
@@ -122,7 +132,7 @@ else
   echo "    Authorization callback URL:  $URL/callback"
   echo "  then Register application, and Generate a new client secret (keep that page open)."
   [ -n "$TTY" ] && open_url https://github.com/settings/applications/new
-  NEW_APP=$(ask "Client ID" "" --client-id)
+  NEW_APP=$(ask "Client ID" "" --client-id) || exit $?
 fi
 if [ -n "$NEW_APP" ]; then
   [[ "$NEW_APP" =~ ^[A-Za-z0-9._-]{10,}$ ]] || die "that doesn't look like a client ID"
@@ -154,6 +164,6 @@ done
 ok "rebuild started; search catches up in a minute or two"
 
 printf '\n\033[1mDone.\033[0m Connect a client:\n\n'
-printf '  Claude Code:             claude mcp add --transport http second-brain %s/mcp\n' "$URL"
+printf '  Claude Code:             claude mcp add -s user --transport http %s %s/mcp\n' "$NAME" "$URL"
 printf '  Claude, ChatGPT, phone:  add a custom connector with %s/mcp\n\n' "$URL"
 printf '  Mac sync (optional):     npm run mac-hook\n'

@@ -10,7 +10,9 @@
 
 ## Deploy your own
 
-Needs a Cloudflare account on the [Workers Paid](https://developers.cloudflare.com/workers/platform/pricing/) plan, Node 24 and git.
+Needs a Cloudflare account on the [Workers Paid](https://developers.cloudflare.com/workers/platform/pricing/) plan, Node 24 and git. No Homebrew or sudo (a second user on a Mac, say)? Install Node with [nvm](https://github.com/nvm-sh/nvm), [fnm](https://github.com/Schniz/fnm) or the [nodejs.org tarball](https://nodejs.org/en/download) in your home folder, and keep it on the `PATH` for `npx wrangler login` too.
+
+A second deployment in the same Cloudflare account (`--name` with another name) gets its own D1, index, notes, queues, workflow and OAuth store; it shares nothing with the first.
 
 ```sh
 git clone https://github.com/YudiG12/second-brain-mcp && cd second-brain-mcp
@@ -34,10 +36,12 @@ npm run mac-hook
 The installer prints your `<PUBLIC_URL>`. Claude Code:
 
 ```sh
-claude mcp add --transport http second-brain <PUBLIC_URL>/mcp
+claude mcp add -s user --transport http <worker-name> <PUBLIC_URL>/mcp
 ```
 
 Claude (web, desktop, phone) and ChatGPT: add a custom connector with `<PUBLIC_URL>/mcp`.
+
+Keyword search sees a change in seconds. Search by meaning is eventually consistent: after a save, edit or move it can take a minute or two to find the new text (and to stop finding the old path).
 
 Then ask:
 
