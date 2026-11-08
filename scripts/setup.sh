@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # every value comes from wrangler.jsonc, the one file to edit for your own deployment
-cfg() { node scripts/config.mjs "$1"; }
+cfg() { node scripts/config.mjs "$@"; }
 cfg check >/dev/null
 ACCOUNT_ID=$(cfg account_id)
 SUBDOMAIN=$(cfg subdomain)
