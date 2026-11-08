@@ -85,6 +85,12 @@ check "running it twice adds nothing" '[ "$(grep -o "notes-sync.sh" "$T/s.json" 
 printf '{ // a comment\n "model": "opus" }' > "$T/s.json"; cp "$T/s.json" "$T/orig.json"
 check "a file it can't parse is left alone, with a clear message" '! merge "$T/s.json" && cmp -s "$T/s.json" "$T/orig.json" && grep -q "can.t parse" "$T/err" && ! grep -q "    at " "$T/err"'
 
+echo "deploy-your-own without a terminal (an agent running it)"
+mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 1\n' > "$T/bin/npx"; chmod +x "$T/bin/npx"
+out=$(PATH="$T/bin:$PATH" bash "$ROOT/scripts/deploy-your-own.sh" --name x </dev/null 2>&1); code=$?
+check "not signed in: exits 2 with a NEEDS line, never waits" '[ $code = 2 ] && printf "%s" "$out" | grep -q "^NEEDS: .*wrangler login"'
+check "an unknown option is refused" '! bash "$ROOT/scripts/deploy-your-own.sh" --nope 1 </dev/null >/dev/null 2>&1'
+
 echo "the repo's own config"
 check "parses" 'node "$CFG" PUBLIC_URL >/dev/null'
 

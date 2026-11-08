@@ -1,0 +1,5 @@
+# Local development only (npm run dev). Copy to .dev.vars, which is gitignored.
+# In production these are Worker secrets: npx wrangler secret put <NAME>
+GITHUB_CLIENT_SECRET=<your GitHub OAuth app client secret>
+ADMIN_SECRET=<openssl rand -hex 32>
+HOOK_SECRET=<openssl rand -hex 32>
