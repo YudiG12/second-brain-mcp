@@ -124,7 +124,7 @@ step "5/7 GitHub sign-in app"
 HAS_SECRET=""; wr secret list 2>/dev/null | grep -q GITHUB_CLIENT_SECRET && HAS_SECRET=1
 NEW_APP=""
 if [ -n "$A_CID" ]; then NEW_APP=$A_CID
-elif [ -n "$HAS_SECRET" ] && yes "Keep the current GitHub OAuth app?" y; then ok "kept"
+elif [ -n "$HAS_SECRET" ] && [ "$(cfg GITHUB_CLIENT_ID)" != none-yet ] && yes "Keep the current GitHub OAuth app?" y; then ok "kept"
 else
   echo "  A person creates a GitHub OAuth app at https://github.com/settings/applications/new with:"
   echo "    Application name:            Second Brain MCP"
