@@ -68,7 +68,7 @@ cp "$ROOT/wrangler.jsonc" "$T/w.jsonc"
 WRANGLER_CONFIG="$T/w.jsonc" node "$CFG" rename brain-test 2>"$T/err"
 check "D1, Vectorize, Artifacts namespace" '[ "$(get d1) $(get VECTORIZE_INDEX) $(get namespace)" = "brain-test brain-test brain-test" ]'
 check "the Vectorize binding follows VECTORIZE_INDEX" 'grep -q "\"index_name\": \"brain-test\"" "$T/w.jsonc"'
-check "queue and dead-letter queue, in producer and both consumers" '[ "$(get queue) $(get dlq)" = "brain-test-index-jobs brain-test-index-jobs-dlq" ] && [ "$(grep -c "brain-test-index-jobs" "$T/w.jsonc")" = 4 ] && ! grep -q "\"index-jobs" "$T/w.jsonc"'
+check "queue and dead-letter queue, in producer and both consumers" '[ "$(get queue) $(get dlq)" = "brain-test-index-jobs brain-test-index-jobs-dlq" ] && [ "$(grep -o "brain-test-index-jobs" "$T/w.jsonc" | wc -l | tr -d " ")" = 4 ] && ! grep -q "\"index-jobs" "$T/w.jsonc"'
 check "comments survive" '[ "$(grep -c "//" "$T/w.jsonc")" = "$(grep -c "//" "$ROOT/wrangler.jsonc")" ]'
 check "a bad name is refused" '! WRANGLER_CONFIG="$T/w.jsonc" node "$CFG" rename "Bad Name" 2>/dev/null'
 

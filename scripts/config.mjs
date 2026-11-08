@@ -2,6 +2,7 @@
 // Prints one setting of this deployment, read from wrangler.jsonc: the single place to edit when
 // you deploy your own copy. Used by the scripts and CI.
 //   node scripts/config.mjs <key>
+//   node scripts/config.mjs rename <base>      (names the D1, Vectorize, Artifacts namespace and queues after <base>)
 //   node scripts/config.mjs set <key> <value>   (name, account_id, d1_id, kv_id, PUBLIC_URL, CF_ACCOUNT_ID,
 //                                              OWNER_GITHUB_ID, GITHUB_CLIENT_ID; keeps comments)
 // Keys: account_id, name, namespace (Artifacts), d1, d1_id, kv_id, queue, dlq, any var (PUBLIC_URL, …), and
@@ -44,6 +45,7 @@ function stripJsonc(src) {
 
 const die = (msg) => { console.error(`config: ${msg}`); process.exit(1); };
 if (process.argv[2] === "set") setValue(process.argv[3], process.argv[4]);
+if (process.argv[2] === "rename") rename(process.argv[3]);
 const key = process.argv[2] ?? die("usage: node scripts/config.mjs <key> | set <key> <value>");
 let cfg;
 try { cfg = JSON.parse(stripJsonc(readFileSync(file, "utf8"))); } catch (e) { die(`can't read ${file}: ${e.message}`); }
@@ -85,6 +87,33 @@ function setValue(k, v) {
   const out = src.slice(0, m.index) + m[1] + JSON.stringify(v) + src.slice(m.index + m[0].length);
   if (read(JSON.parse(stripJsonc(out))) !== v) die(`writing ${k} changed the wrong value; edit ${file} by hand`);
   writeFileSync(file, out);
+  process.exit(0);
+}
+
+/** `rename <base>`: names the D1 database, Vectorize index, Artifacts namespace and queues after
+ * <base>, so two deployments in one account never share a resource. Keeps comments. */
+function rename(base) {
+  if (!/^[a-z0-9][a-z0-9-]{1,40}$/.test(base ?? "")) die("usage: rename <base> (lowercase letters, digits and dashes)");
+  let src = readFileSync(file, "utf8");
+  const c = JSON.parse(stripJsonc(src));
+  const q = c.queues?.producers?.[0]?.queue, dlq = c.queues?.consumers?.[0]?.dead_letter_queue;
+  const swap = (field, from, to) => {
+    if (from === undefined) return;
+    src = src.replace(new RegExp(`("${field}"\\s*:\\s*)"${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g"), `$1${JSON.stringify(to)}`);
+  };
+  swap("index_name", c.vectorize?.[0]?.index_name, base);
+  swap("VECTORIZE_INDEX", c.vars?.VECTORIZE_INDEX, base);
+  swap("namespace", c.artifacts?.[0]?.namespace, base);
+  swap("database_name", c.d1_databases?.[0]?.database_name, base);
+  swap("queue", dlq, `${base}-index-jobs-dlq`); // the dead-letter queue first: its name contains the queue's
+  swap("dead_letter_queue", dlq, `${base}-index-jobs-dlq`);
+  swap("queue", q, `${base}-index-jobs`);
+  const n = JSON.parse(stripJsonc(src));
+  const okNow = n.vectorize?.[0]?.index_name === base && n.vars?.VECTORIZE_INDEX === base && n.artifacts?.[0]?.namespace === base &&
+    n.d1_databases?.[0]?.database_name === base && n.queues?.producers?.[0]?.queue === `${base}-index-jobs` &&
+    n.queues?.consumers?.every((x) => x.queue.startsWith(`${base}-index-jobs`)) && n.queues?.consumers?.[0]?.dead_letter_queue === `${base}-index-jobs-dlq`;
+  if (!okNow) die(`rename left ${file} inconsistent; nothing written`);
+  writeFileSync(file, src);
   process.exit(0);
 }
 

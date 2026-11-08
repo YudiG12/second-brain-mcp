@@ -48,6 +48,8 @@ if gh api user --jq .id >/dev/null 2>&1; then GH_ID=$(gh api user --jq .id); GH_
 else GH_USER=$(ask "Your GitHub username"); GH_ID=$(curl -fsS "https://api.github.com/users/$GH_USER" | json j.id); fi
 [ -n "$GH_ID" ] || die "couldn't find the GitHub user $GH_USER"
 URL="https://$NAME.$SUB.workers.dev"
+# a new deployment (another name or account) gets its own D1, index, notes and queues
+if [ "$NAME" != "$(cfg name)" ] || [ "$ACCOUNT" != "$(cfg account_id)" ]; then cfg rename "$NAME"; fi
 cfg set name "$NAME"; cfg set account_id "$ACCOUNT"; cfg set CF_ACCOUNT_ID "$ACCOUNT"
 cfg set PUBLIC_URL "$URL"; cfg set OWNER_GITHUB_ID "$GH_ID"
 ok "$URL, owner: $GH_USER ($GH_ID)"
