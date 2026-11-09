@@ -65,7 +65,7 @@ def legend(x, y, items):
         x += 50 + 7.4 * len(name)
     return t
 
-def arrow(points, label=None, at=0.5, both=False, flow=None):
+def arrow(points, label=None, at=0.5, both=False, flow=None, dy=0):
     d = "M" + " L".join(f"{x},{y}" for x, y in points)
     style = f' style="stroke:{FLOW[flow]};stroke-width:2.2"' if flow else ""
     end = f"m-{flow}" if flow else "m"
@@ -74,9 +74,9 @@ def arrow(points, label=None, at=0.5, both=False, flow=None):
         # label on the longest segment
         segs = list(zip(points, points[1:]))
         (x1, y1), (x2, y2) = max(segs, key=lambda s: abs(s[1][0]-s[0][0]) + abs(s[1][1]-s[0][1]))
-        lx, ly = x1 + (x2 - x1) * at, y1 + (y2 - y1) * at
+        lx, ly = x1 + (x2 - x1) * at, y1 + (y2 - y1) * at + dy  # dy: lift the pill off a short arrow
         w = 7.2 * len(label) + 16
-        t += f'<rect x="{lx - w/2}" y="{ly - 11}" width="{w}" height="22" rx="11" fill="{NAVY}"/>'
+        t += f'<rect x="{lx - w/2}" y="{ly - 11}" width="{w}" height="22" rx="11" fill="{FLOW[flow] if flow else NAVY}"/>'
         t += f'<text x="{lx}" y="{ly + 4}" text-anchor="middle" class="p">{html.escape(label)}</text>'
     return t
 
@@ -139,25 +139,26 @@ v2.append(box(X2, 700, "Workers AI", "bge-m3 embeddings", "teal", icons=("sparkl
 v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
 # flows: colour says which one; the name is said once, not on every arrow
 ft = lambda x, y, k, name: f'<text x="{x}" y="{y}" class="ft" fill="{FLOW[k]}">{html.escape(name)}</text>'
-v2.append(legend(440, 858, [("auth", "MCP calls with OAuth"), ("write", "write the note"), ("index", "write the index and embeddings"), ("read", "read and search")]))
-# sign-in
-v2.append(arrow([(260, 152), (370, 152), (370, 264), (440, 264)], flow="auth"))
+# sign-in and MCP calls: the three clients bend at the same x and enter the Worker evenly spaced
+v2.append(arrow([(260, 152), (340, 152), (340, 266), (440, 266)], flow="auth"))
+v2.append(arrow([(260, 282), (440, 282)], "MCP + OAuth", at=0.55, flow="auth"))
+v2.append(arrow([(260, 402), (340, 402), (340, 298), (440, 298)], flow="auth"))
 v2.append(arrow([(550, 250), (550, 174)], flow="auth"))
-# write the note: client -> Worker -> RepoWriter -> Artifacts
-v2.append(arrow([(260, 282), (440, 282)], flow="auth"))
-v2.append(arrow([(260, 402), (320, 402), (320, 302), (440, 302)], flow="auth"))
+# write the note: Worker -> RepoWriter -> Artifacts
 v2.append(arrow([(660, 282), (800, 282)], flow="write"))
 v2.append(arrow([(1020, 282), (1160, 282)], flow="write"))
+v2.append(arrow([(660, 282), (800, 282)], "write the note", flow="write", dy=-22))
 # index it: into the Queue, then the consumer writes the indexes
 v2.append(arrow([(620, 314), (620, 430), (860, 430), (860, 480)], flow="index"))
-v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], flow="index"))
+v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], "index in the background", flow="index"))
 v2.append(arrow([(660, 512), (800, 512)], flow="index"))
 v2.append(arrow([(840, 544), (840, 620), (550, 620), (550, 700)], flow="index"))
 v2.append(arrow([(910, 544), (910, 700)], flow="index"))
-v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], flow="index"))
+v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], "write embeddings", flow="index"))
 # read and search
-v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], flow="read"))
+v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read a note", at=0.5, flow="read"))
 v2.append(arrow([(440, 310), (418, 310), (418, 732), (440, 732)], flow="read"))
-v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)], flow="read"))
-open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 890, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
+v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)], "search", flow="read"))
+
+open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 860, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
