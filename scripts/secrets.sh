@@ -3,8 +3,8 @@
 #   scripts/secrets.sh github-oauth    asks for the GitHub OAuth app's client secret in Wrangler's hidden prompt
 #                                      and saves it to the Worker as GITHUB_CLIENT_SECRET
 #   scripts/secrets.sh admin           new ADMIN_SECRET (admin routes): saved to .dev.vars and the Worker
-#   scripts/secrets.sh hook            new HOOK_SECRET (only issues Artifacts tokens): saved to .dev.vars,
-#                                      the Worker and the macOS Keychain (service "second-brain-hook")
+#   scripts/secrets.sh hook            new HOOK_SECRET (only issues Artifacts tokens, for scripts/mirror.sh): saved to
+#                                      .dev.vars, the Worker and the macOS Keychain (service "second-brain-hook")
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")/.."

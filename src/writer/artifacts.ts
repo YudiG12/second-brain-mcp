@@ -116,8 +116,8 @@ export class ArtifactsWorkingCopy implements WorkingCopy {
 
   async contains(commit: string) {
     if (this.head === commit) return true;
-    // Walks every parent from the fetched tip (not just the first-parent line: the Mac's sync
-    // merges, so a commit can sit on a second parent). Bounded: a lost push is checked right away.
+    // Walks every parent from the fetched tip (not just the first-parent line: a merge from
+    // another Git client puts a commit on a second parent). Bounded: a lost push is checked right away.
     using repo = await this.artifacts.get(this.repoName);
     const seen = new Set<string>();
     const queue = [this.head ?? (await repo.log({ ref: BRANCH, limit: 1 }))[0]?.hash].filter(Boolean) as string[];

@@ -4,6 +4,13 @@
 
 ### Changed
 - **`write_note` checks the version before overwriting**: `read_note` returns a version, `write_note` needs it as `expected_version` to overwrite an existing note, and a stale or missing version is a `conflict` with nothing written. Closes a silent lost update when two agents overwrite the same note ([ADR 013](docs/adr/013-version-check-on-overwrite.md)).
+- **Every client reads and writes only through MCP**, Claude Code on the Mac included. Every write now goes through the Durable Object and its version check ([ADR 014](docs/adr/014-mcp-only-clients.md)).
+
+### Added
+- `npm run mirror`: an optional read-only copy of the notes in a folder, for viewing (Obsidian's graph view). It fetches and resets; it never edits or pushes.
+
+### Removed
+- The Claude Code sync hook (`clients/claude-code/`, `npm run mac-hook`, `scripts/merge-hooks.mjs`) and its shell tests. The `/hook/artifacts-token` route and `HOOK_SECRET` stay, for the mirror.
 
 ## v2 (2026-11-06)
 
