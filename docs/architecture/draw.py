@@ -32,16 +32,17 @@ def glyph(name, x, y, size=26, color="#fff"):
     return f'<g transform="translate({x},{y}) scale({k})" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[name]}</g>'
 
 C = dict(indigo="#5B5BD6", purple="#8E6FCB", teal="#3FA796", green="#2F8A5B", red="#D1495B", orange="#E08A3C", slate="#4A5866")
+DARK = dict(indigo="#3B3BA8", purple="#5E4396", teal="#22705F", green="#1F5E3D", red="#9C2C3B", orange="#9A5512", slate="#2E3944")
 NAVY, MUTED, BG, LINE = "#1B2632", "#4A5D72", "#FCFAF7", "#677A8E"
 W, H = 220, 64
 
 def box(x, y, title, sub, color, caption=None, w=W, icons=(), kind="service"):
     """kind: service = managed resource (solid); part = a class inside the Worker (outlined); api = no resource, only called (dashed)."""
-    ink = "#fff" if kind == "service" else C[color]
+    ink = "#fff" if kind == "service" else (DARK[color] if kind == "part" else C[color])
     if kind == "service":
         t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}"/>'
     elif kind == "part":
-        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="#fff" stroke="{C[color]}" stroke-width="2"/>'
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}" fill-opacity="0.2"/>'
     else:
         t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="#fff" stroke="{C[color]}" stroke-width="2" stroke-dasharray="5 4"/>'
     # icons on the left; text centred in the space that's left
@@ -141,19 +142,19 @@ v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
 v2.append('<rect x="424" y="232" width="612" height="342" rx="8" fill="#5B5BD6" fill-opacity="0.06" stroke="#5B5BD6" stroke-width="1.5" stroke-dasharray="6 4"/>'
           '<text x="436" y="566" class="gl" style="fill:#5B5BD6">WORKER · second-brain-mcp · your code</text>')
 # row 1: the write
-v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",)))
-v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "purple", icons=("lock",)))
+v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",), kind="part"))
+v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "purple", icons=("lock",), kind="part"))
 v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
 # row 2: indexing
-v2.append(box(X1, 480, "Reconcile", "Workflow · runs daily", "orange", icons=("workflow",)))
-v2.append(box(X2, 480, "Queue consumer", "the only index writer", "orange", icons=("workers",)))
+v2.append(box(X1, 480, "Reconcile", "Workflow · runs daily", "orange", icons=("workflow",), kind="part"))
+v2.append(box(X2, 480, "Queue consumer", "the only index writer", "orange", icons=("workers",), kind="part"))
 v2.append(box(X3, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
 # row 3: the indexes, and the model the consumer calls
 v2.append(box(X1, 700, "D1", "manifest · keyword index", "red", icons=("database",)))
 v2.append(box(X2, 700, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"))
 v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
 lk = lambda x, kind, c, name: (f'<rect x="{x}" y="812" width="22" height="14" rx="3" fill="{c if kind!="api" else "#fff"}"{" fill-opacity=\"0.12\"" if kind=="area" else ""} stroke="{c}" stroke-width="1.6"{" stroke-dasharray=\"4 3\"" if kind in ("api","area") else ""}/>' f'<text x="{x+30}" y="824" class="c">{name}</text>')
-v2.append(lk(440, "area", "#5B5BD6", "Worker: parts inside are your code") + lk(740, "service", C["green"], "managed service") + lk(920, "api", C["teal"], "API, only called"))
+v2.append(lk(440, "area", "#5B5BD6", "Worker area") + f'<rect x="580" y="812" width="22" height="14" rx="3" fill="{C["purple"]}" fill-opacity="0.2"/><text x="610" y="824" class="c">part of the Worker</text>' + lk(770, "service", C["green"], "managed service") + lk(950, "api", C["teal"], "API, only called"))
 # sign-in and MCP calls
 v2.append(arrow([(260, 156), (340, 156), (340, 258), (440, 258)], flow="auth"))
 v2.append(arrow([(260, 292), (440, 292)], "MCP + OAuth", at=0.38, flow="auth"))
