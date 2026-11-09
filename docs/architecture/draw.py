@@ -19,6 +19,9 @@ LUCIDE = {
     "sparkles": '<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
     "terminal": '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
     "chat": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+    "laptop": '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+    "smartphone": '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+    "monitor": '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
 }
 
 def glyph(name, x, y, size=26):
@@ -44,6 +47,12 @@ def box(x, y, title, sub, color, caption=None, w=W, icons=()):
     if caption:
         t += f'<text x="{x + w/2}" y="{y + H + 18}" text-anchor="middle" class="c">{html.escape(caption)}</text>'
     return t
+
+def devices(cx, y, names, label):
+    """A caption with small device icons before it, centred under a box."""
+    tw = 6.6 * len(label); iw = 20 * len(names); x = cx - (iw + 6 + tw) / 2
+    t = "".join(f'<g transform="translate({x + i*20},{y - 13}) scale(0.67)" fill="none" stroke="{MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[n]}</g>' for i, n in enumerate(names))
+    return t + f'<text x="{x + iw + 6}" y="{y}" class="c">{html.escape(label)}</text>'
 
 def arrow(points, label=None, at=0.5, both=False):
     d = "M" + " L".join(f"{x},{y}" for x, y in points)
@@ -93,37 +102,40 @@ open(os.path.join(os.path.dirname(__file__), "v1.svg"), "w").write(svg(1120, 650
 # ---------- v2 ----------
 # Columns: outside (A) | Worker & runners (B) | storage & queue (C) | indexes & AI (D)
 A, B, Cx, D = 40, 420, 800, 1180
+# top to bottom = the order a write happens: client, Worker, writer, Artifacts, Queue, indexes.
+# Side columns: things used on the way (KV at sign-in, Workers AI for embeddings) or on a schedule (Workflow).
 v2 = []
-v2.append('<rect x="390" y="92" width="1040" height="640" rx="10" class="g"/>' + f'<path transform="translate(404,98) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="428" y="112" class="gl">CLOUDFLARE</text>')
-v2.append(box(A, 110, "GitHub", "sign-in only", "slate", "owner's account, no scopes", icons=("github",)))
-v2.append(box(A, 226, "Claude · ChatGPT", "MCP clients", "slate", "web and phone", icons=("claude", "chat")))
-v2.append(box(A, 330, "Claude Code", "MCP client", "slate", "on the Mac", icons=("terminal",)))
-v2.append(box(B, 226, "Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
-v2.append(box(B, 420, "RepoWriter", "Durable Object · 1 per repo", "purple", "in-memory mutex, retries", icons=("lock",)))
-v2.append(box(B, 600, "Workflow", "reconcile · daily", "orange", "snapshots notes + manifest", icons=("workflow",)))
-v2.append(box(Cx, 120, "KV", "OAuth grants", "slate", "hashed tokens", icons=("key",)))
-v2.append(box(Cx, 420, "Artifacts", "repo notes · Git", "green", "source of truth", icons=("branch",)))
-v2.append(box(Cx, 600, "Queue", "index-jobs + DLQ", "orange", "the only index writer", icons=("queue",)))
-v2.append(box(D, 226, "Vectorize", "semantic index", "teal", w=210, icons=("search",)))
-v2.append(box(D, 420, "D1", "manifest · FTS5 · alerts", "red", w=210, icons=("database",)))
-v2.append(box(D, 600, "Workers AI", "bge-m3", "teal", w=210, icons=("sparkles",)))
+v2.append('<rect x="390" y="92" width="1040" height="900" rx="10" class="g"/>' + f'<path transform="translate(404,98) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="428" y="112" class="gl">CLOUDFLARE</text>')
+v2.append(box(A, 120, "GitHub", "sign-in only", "slate", "owner's account, no scopes", icons=("github",)))
+v2.append(box(A, 250, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 332, ("monitor", "smartphone"), "Mac (web) and phone"))
+v2.append(box(A, 370, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 452, ("laptop",), "on the MacBook"))
+v2.append(box(B, 250, "1 · Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
+v2.append(box(Cx, 130, "KV", "OAuth grants", "slate", "hashed tokens", icons=("key",)))
+v2.append(box(B, 410, "2 · RepoWriter", "Durable Object · mutex", "purple", icons=("lock",)))
+v2.append(box(B, 570, "3 · Artifacts", "Git · source of truth", "green", icons=("branch",)))
+v2.append(box(Cx, 410, "Workflow", "reconcile · daily", "orange", icons=("workflow",)))
+v2.append(box(B, 730, "4 · Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
+v2.append(box(D, 730, "Workers AI", "bge-m3", "teal", w=210, icons=("sparkles",)))
+v2.append(box(B, 890, "5 · Vectorize", "semantic index", "teal", icons=("search",)))
+v2.append(box(Cx, 890, "5 · D1", "manifest · FTS5 · alerts", "red", icons=("database",)))
 # into the Worker
-v2.append(arrow([(260, 252), (420, 252)], "OAuth"))
-v2.append(arrow([(260, 362), (300, 362), (300, 282), (420, 282)], "OAuth"))
-v2.append(arrow([(260, 142), (370, 142), (370, 234), (420, 234)], "sign in", at=0.45))
-# from the Worker
-v2.append(arrow([(600, 226), (600, 152), (800, 152)], "grants", at=0.5))
-v2.append(arrow([(640, 258), (1165, 258), (1165, 436), (1180, 436)]))
-v2.append(arrow([(640, 258), (1180, 258)], "search", at=0.62))
-v2.append(arrow([(640, 272), (720, 272), (720, 436), (800, 436)], "read", at=0.6))
-v2.append(arrow([(640, 284), (660, 284), (660, 614), (800, 614)], "enqueue", at=0.15))
-v2.append(arrow([(530, 290), (530, 420)], "operations"))
-# writes, events, indexing
-v2.append(arrow([(640, 452), (800, 452)], "git push"))
-v2.append(arrow([(990, 484), (990, 600)], "pushed event"))
-v2.append(arrow([(640, 632), (800, 632)], "fixes"))
-v2.append(arrow([(1020, 632), (1180, 632)], "embed"))
-v2.append(arrow([(1020, 614), (1110, 614), (1110, 452), (1180, 452)], "record", at=0.5))
-v2.append(arrow([(1020, 604), (1140, 604), (1140, 270), (1180, 270)], "upsert", at=0.75))
-open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 770, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
+v2.append(arrow([(260, 152), (370, 152), (370, 262), (420, 262)], "sign in", at=0.5))
+v2.append(arrow([(260, 278), (420, 278)], "OAuth"))
+v2.append(arrow([(260, 402), (310, 402), (310, 300), (420, 300)], "OAuth", at=0.5))
+v2.append(arrow([(600, 250), (600, 162), (800, 162)], "grants", at=0.5))
+# the write, top to bottom
+v2.append(arrow([(530, 314), (530, 410)], "operations"))
+v2.append(arrow([(530, 474), (530, 570)], "git push"))
+v2.append(arrow([(530, 634), (530, 730)], "pushed event"))
+v2.append(arrow([(640, 290), (700, 290), (700, 742), (640, 742)], "enqueue", at=0.2))
+# reads and search
+v2.append(arrow([(640, 270), (740, 270), (740, 602), (640, 602)], "read", at=0.75))
+v2.append(arrow([(640, 258), (1120, 258), (1120, 922), (1020, 922)], "search", at=0.3))
+v2.append(arrow([(1120, 940), (1120, 970), (530, 970), (530, 954)]))
+# indexing
+v2.append(arrow([(910, 474), (910, 782), (640, 782)], "fixes", at=0.4))
+v2.append(arrow([(640, 760), (1180, 760)], "embed", at=0.78))
+v2.append(arrow([(500, 794), (500, 890)], "upsert"))
+v2.append(arrow([(600, 794), (600, 850), (870, 850), (870, 890)], "record", at=0.6))
+open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 1010, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
