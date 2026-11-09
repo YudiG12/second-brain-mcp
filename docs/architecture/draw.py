@@ -97,7 +97,7 @@ v2 = []
 v2.append('<rect x="390" y="92" width="1040" height="640" rx="10" class="g"/>' + f'<path transform="translate(404,98) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="428" y="112" class="gl">CLOUDFLARE</text>')
 v2.append(box(A, 110, "GitHub", "sign-in only", "slate", "owner's account, no scopes", icons=("github",)))
 v2.append(box(A, 226, "Claude · ChatGPT", "MCP clients", "slate", "web and phone", icons=("claude", "chat")))
-v2.append(box(A, 330, "Claude Code", "MCP client", "slate", "on the Mac · MCP only", icons=("terminal",)))
+v2.append(box(A, 330, "Claude Code", "MCP client", "slate", "on the Mac", icons=("terminal",)))
 v2.append(box(B, 226, "Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
 v2.append(box(B, 420, "RepoWriter", "Durable Object · 1 per repo", "purple", "in-memory mutex, retries", icons=("lock",)))
 v2.append(box(B, 600, "Workflow", "reconcile · daily", "orange", "snapshots notes + manifest", icons=("workflow",)))
@@ -108,9 +108,9 @@ v2.append(box(D, 226, "Vectorize", "semantic index", "teal", w=210, icons=("sear
 v2.append(box(D, 420, "D1", "manifest · FTS5 · alerts", "red", w=210, icons=("database",)))
 v2.append(box(D, 600, "Workers AI", "bge-m3", "teal", w=210, icons=("sparkles",)))
 # into the Worker
-v2.append(arrow([(260, 258), (420, 258)], "OAuth"))
-v2.append(arrow([(260, 362), (330, 362), (330, 276), (420, 276)]))
-v2.append(arrow([(260, 142), (370, 142), (370, 244), (420, 244)], "sign in", at=0.45))
+v2.append(arrow([(260, 252), (420, 252)], "OAuth"))
+v2.append(arrow([(260, 362), (300, 362), (300, 282), (420, 282)], "OAuth"))
+v2.append(arrow([(260, 142), (370, 142), (370, 234), (420, 234)], "sign in", at=0.45))
 # from the Worker
 v2.append(arrow([(600, 226), (600, 152), (800, 152)], "grants", at=0.5))
 v2.append(arrow([(640, 258), (1165, 258), (1165, 436), (1180, 436)]))
