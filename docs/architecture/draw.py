@@ -131,10 +131,10 @@ v2.append(box(X1, 250, "Worker", "OAuth · MCP tools · admin", "indigo", icons=
 v2.append(box(X2, 250, "RepoWriter", "Durable Object · mutex", "purple", icons=("lock",)))
 v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
 # row 2
-v2.append(box(X1, 480, "Workflow", "reconcile · daily", "orange", icons=("workflow",)))
+v2.append(box(X1, 480, "Workflow", "runs daily", "orange", icons=("workflow",)))
 v2.append(box(X2, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
 # row 3
-v2.append(box(X1, 700, "D1", "manifest · FTS5 · alerts", "red", icons=("database",)))
+v2.append(box(X1, 700, "D1", "manifest · keyword index", "red", icons=("database",)))
 v2.append(box(X2, 700, "Workers AI", "bge-m3 embeddings", "teal", icons=("sparkles",)))
 v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
 # flows: colour says which one; the name is said once, not on every arrow
@@ -152,6 +152,7 @@ v2.append(arrow([(660, 282), (800, 282)], "write the note", flow="write", dy=-22
 v2.append(arrow([(620, 314), (620, 430), (860, 430), (860, 480)], flow="index"))
 v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], "index in the background", flow="index"))
 v2.append(arrow([(660, 512), (800, 512)], flow="index"))
+v2.append(arrow([(660, 512), (800, 512)], "reconciliation", flow="index", dy=-22))
 v2.append(arrow([(840, 544), (840, 620), (550, 620), (550, 700)], flow="index"))
 v2.append(arrow([(910, 544), (910, 700)], flow="index"))
 v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], "write embeddings", flow="index"))
