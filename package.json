@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test:ui": "vitest --ui",
     "deploy-your-own": "bash scripts/deploy-your-own.sh",
-    "mac-hook": "bash scripts/mac-hook.sh"
+    "mirror": "bash scripts/mirror.sh"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^1.2.4",

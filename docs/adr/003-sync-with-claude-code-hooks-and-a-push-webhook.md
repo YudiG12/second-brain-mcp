@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted for v1; in v2, [ADR 007](007-cloudflare-artifacts-for-the-notes.md) supersedes the GitHub webhook (push events into a Queue) and the pull throttle (10 minutes, and no fetch on `push` without changes) |
+| **Status** | Superseded by [ADR 014](014-mcp-only-clients.md). Before that: accepted for v1; in v2, [ADR 007](007-cloudflare-artifacts-for-the-notes.md) supersedes the GitHub webhook (push events into a Queue) and the pull throttle (10 minutes, and no fetch on `push` without changes) |
 | **Date** | 2026-11-05 |
 | **Deciders** | Yudi Ganeko |
 

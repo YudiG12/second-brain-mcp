@@ -74,8 +74,7 @@ hld = HEAD + f'''<div style="width:1200px;height:500px;position:relative;backgro
 <div style="position:absolute;left:408px;top:84px;display:flex;align-items:center;gap:8px" class="eb">{ic("cloudflare", "#F38020", 18)}<span>Cloudflare</span></div>
 <svg style="position:absolute;left:0;top:0" width="1200" height="500">{M}
 <g fill="none" style="stroke:var(--arrow)" stroke-width="1.8" marker-end="url(#a)">
- <path d="M222 176 H320 V258 H462"/><path d="M172 376 H320 V288 H462"/><path d="M576 258 H690 V170 H742"/><path d="M576 288 H690 V380 H742"/><path d="M856 380 H982"/></g>
-<g fill="none" style="stroke:var(--git)" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#b)"><path d="M137 118 V36 H794 V112"/></g></svg>
+ <path d="M222 176 H320 V258 H462"/><path d="M172 376 H320 V288 H462"/><path d="M576 258 H690 V170 H742"/><path d="M576 288 H690 V380 H742"/><path d="M856 380 H982"/></g></svg>
 <div style="position:absolute;left:52px;top:120px">{mac}</div><div class="nm" style="left:37px;top:240px">Mac</div>
 <div style="position:absolute;left:102px;top:314px">{phone}</div><div class="nm" style="left:37px;top:446px">Any other client</div>
 {sq(520, 273, "workers", "#F38020", "Worker")}{sq(800, 165, "branch", "#3FA772", "Artifacts")}{sq(800, 380, "sparkles", "#7B6CF0", "Workers AI")}{sq(1040, 380, "search", "#4F86D6", "Vectorize")}

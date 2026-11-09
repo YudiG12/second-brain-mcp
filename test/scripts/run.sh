@@ -76,19 +76,6 @@ check "no account-wide name of the original deployment is left (D1, Vectorize, n
 check "the D1 id, the OAuth KV id and the GitHub client ID are reset: they belong to the original" '[ "$(get d1_id) $(get kv_id) $(get GITHUB_CLIENT_ID)" = "none-yet none-yet none-yet" ]'
 check "a bad name is refused" '! WRANGLER_CONFIG="$T/w.jsonc" node "$CFG" rename "Bad Name" 2>/dev/null'
 
-echo "merge-hooks: adds the sync hooks to Claude Code settings"
-M="$ROOT/scripts/merge-hooks.mjs"
-merge() { node "$M" "$1" 2>"$T/err"; }
-rm -f "$T/s.json"; merge "$T/s.json"
-check "a missing settings file is created with the three hooks" '[ "$(node -e "const s=require(process.argv[1]);console.log(Object.keys(s.hooks).sort().join())" "$T/s.json")" = "SessionStart,Stop,UserPromptSubmit" ]'
-printf '{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}' > "$T/s.json"; merge "$T/s.json"
-check "other settings and existing hooks are kept" 'grep -q opus "$T/s.json" && grep -q "say done" "$T/s.json" && grep -q notes-sync "$T/s.json"'
-check "a backup of the old file is kept" 'grep -q "say done" "$T/s.json.bak" && ! grep -q notes-sync "$T/s.json.bak"'
-merge "$T/s.json"
-check "running it twice adds nothing" '[ "$(grep -o "notes-sync.sh" "$T/s.json" | wc -l | tr -d " ")" = 3 ]'
-printf '{ // a comment\n "model": "opus" }' > "$T/s.json"; cp "$T/s.json" "$T/orig.json"
-check "a file it can't parse is left alone, with a clear message" '! merge "$T/s.json" && cmp -s "$T/s.json" "$T/orig.json" && grep -q "can.t parse" "$T/err" && ! grep -q "    at " "$T/err"'
-
 echo "deploy-your-own without a terminal (an agent running it)"
 mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 1\n' > "$T/bin/npx"; chmod +x "$T/bin/npx"
 out=$(PATH="$T/bin:$PATH" bash "$ROOT/scripts/deploy-your-own.sh" --name x </dev/null 2>&1); code=$?

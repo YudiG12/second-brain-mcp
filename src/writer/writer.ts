@@ -11,7 +11,7 @@ class OperationError extends Error {
 
 /** Turns an operation into file changes, reading the working copy. Throws OperationError if it can't apply. */
 async function changesFor(op: Operation, read: (path: string) => Promise<string | null>, caseTwin: (path: string) => Promise<string | null>): Promise<Change[]> {
-  // macOS keeps names case-insensitive: Nota.md and nota.md would be one file on the Mac's clone
+  // macOS keeps names case-insensitive: Nota.md and nota.md would be one file in a mirror on a Mac
   const target = op.kind === "move" ? op.to : op.kind === "write" || op.kind === "create" ? op.path : null;
   if (target) {
     const twin = await caseTwin(target);

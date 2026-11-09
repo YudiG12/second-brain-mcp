@@ -4,7 +4,7 @@
 
 **A remote MCP server that gives every AI client the same Markdown notes**: Claude Code on the Mac, Claude on the web and phone, ChatGPT. Search by keyword or by meaning; every change is a Git commit. Deploy your own on Cloudflare.
 
-<p align="center"><img src="docs/assets/hld-light.png" alt="High-level design: the Mac and any other client talk MCP to a Worker on Cloudflare, which keeps the notes in Artifacts and embeds them with Workers AI into Vectorize" width="720"></p>
+<p align="center"><img src="docs/assets/hld-light.png" alt="High-level design: Claude Code and any other client talk MCP to a Worker on Cloudflare, which keeps the notes in Artifacts and embeds them with Workers AI into Vectorize" width="720"></p>
 
 <p align="center"><sub>A simplified view. Every component, with the decision behind it: <a href="ARCHITECTURE.md">ARCHITECTURE.md</a>.</sub></p>
 
@@ -25,11 +25,13 @@ Or ask your AI coding agent:
 Clone https://github.com/YudiG12/second-brain-mcp and deploy it for me, following its AGENTS.md.
 ```
 
-Optional, sync a local clone on your Mac:
+Every client, Claude Code on the Mac included, reads and writes only through the MCP tools ([ADR 014](docs/adr/014-mcp-only-clients.md)). Optional, a read-only copy of the notes in a folder, to view them in Obsidian:
 
 ```sh
-npm run mac-hook
+scripts/secrets.sh hook && npm run mirror -- ~/notes
 ```
+
+Don't edit that folder: each run resets it. Run it on a schedule (launchd or cron) to keep it fresh.
 
 ## How to use
 

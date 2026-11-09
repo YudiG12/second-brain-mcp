@@ -85,4 +85,4 @@ else
   exit 1
 fi
 
-[ -n "${DEPLOY_YOUR_OWN:-}" ] || echo "Done. Next: push the notes (first time), npx wrangler deploy, then scripts/secrets.sh github-oauth and admin (and hook for a Mac clone). See docs/setup.md."
+[ -n "${DEPLOY_YOUR_OWN:-}" ] || echo "Done. Next: push the notes (first time), npx wrangler deploy, then scripts/secrets.sh github-oauth and admin (and hook for the read-only mirror). See docs/setup.md."

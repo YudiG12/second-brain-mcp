@@ -182,7 +182,7 @@ function createServer() {
 
   server.registerTool(
     "save_idea",
-    { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it. The local clone pulls it on the next session.", inputSchema: { title: z.string(), content: z.string() } },
+    { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {
       // never overwrite another idea with the same title on the same day (#31): try -2, -3...
       const base = await ideaPath(title);
@@ -259,8 +259,8 @@ const app = {
     if (url.pathname === "/authorize") return authorize(request, envArg);
     if (url.pathname === "/callback" && request.method === "GET") return callback(request, envArg);
 
-    // a 1-hour write token for the notes repo, for the Mac's sync hook (ADR 007). Its own secret,
-    // which can do nothing else: a leak from the Mac can't reach the admin routes (#39).
+    // a 1-hour token for the notes repo, for the optional read-only mirror (scripts/mirror.sh, ADR 014).
+    // Its own secret, which can do nothing else: a leak from the Mac can't reach the admin routes (#39).
     if (url.pathname === "/hook/artifacts-token" && request.method === "POST") {
       if (!(await hasBearer(request, envArg.HOOK_SECRET))) return new Response("Not found", { status: 404 });
       using repo = await envArg.ARTIFACTS.get(envArg.NOTES_REPO);

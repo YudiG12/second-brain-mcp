@@ -166,4 +166,4 @@ ok "rebuild started; search catches up in a minute or two"
 printf '\n\033[1mDone.\033[0m Connect a client:\n\n'
 printf '  Claude Code:             claude mcp add -s user --transport http %s %s/mcp\n' "$NAME" "$URL"
 printf '  Claude, ChatGPT, phone:  add a custom connector with %s/mcp\n\n' "$URL"
-printf '  Mac sync (optional):     npm run mac-hook\n'
+printf '  Read-only mirror (optional, Mac): scripts/secrets.sh hook, then npm run mirror\n'

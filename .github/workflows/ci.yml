@@ -29,8 +29,6 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - name: Sync hook tests
-        run: bash test/hook/run.sh
       - name: Script tests
         run: bash test/scripts/run.sh
       - name: Publish the Vitest UI report
