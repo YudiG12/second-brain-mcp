@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **`write_note` checks the version before overwriting**: `read_note` returns a version, `write_note` needs it as `expected_version` to overwrite an existing note, and a stale or missing version is a `conflict` with nothing written. Closes a silent lost update when two agents overwrite the same note ([ADR 013](docs/adr/013-version-check-on-overwrite.md)).
+
 ## v2 (2026-11-06)
 
 Built in one day as a series of PRs, each one red tests first, then green, then a review by a separate agent with a clean context before merge. Decisions in [ADR 006](docs/adr/006-wrangler-and-a-setup-script-instead-of-terraform.md) to [ADR 012](docs/adr/012-hybrid-search-with-d1-fts5.md); design in [spec v2](docs/spec/v2.md).

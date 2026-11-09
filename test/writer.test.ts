@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Writer } from "../src/writer/writer";
 import { FakeRemote, FakeWorkingCopy } from "./fakes/git";
+import { noteVersion } from "../src/writer/version";
 
 let remote: FakeRemote;
 let copy: FakeWorkingCopy;
@@ -85,7 +86,7 @@ describe("Writer: operations", () => {
     expect(await writer.run({ kind: "write", path: "A.md", content: "x" })).toMatchObject({ status: "failed" });
     expect(await writer.run({ kind: "create", path: "B.MD", content: "x" })).toMatchObject({ status: "failed" });
     expect(await writer.run({ kind: "move", from: "a.md", to: "B.md" })).toMatchObject({ status: "failed" });
-    expect(await writer.run({ kind: "write", path: "a.md", content: "same name is fine" })).toMatchObject({ status: "ok" });
+    expect(await writer.run({ kind: "write", path: "a.md", content: "same name is fine", expectedVersion: await noteVersion("alpha\n\nbeta\n") })).toMatchObject({ status: "ok" });
     expect(await writer.run({ kind: "move", from: "a.md", to: "A.md" })).toMatchObject({ status: "ok" }); // renaming its own case
   });
 

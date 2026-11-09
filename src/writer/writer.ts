@@ -1,9 +1,10 @@
 import type { Change, Operation, WorkingCopy, WriteResult } from "./types";
+import { noteVersion } from "./version";
 
 const MAX_ATTEMPTS = 3; // pushes before giving up as busy (spec v2 §5.1)
 
 class OperationError extends Error {
-  constructor(message: string, readonly code?: "exists") {
+  constructor(message: string, readonly code?: "exists" | "conflict") {
     super(message);
   }
 }
@@ -17,8 +18,18 @@ async function changesFor(op: Operation, read: (path: string) => Promise<string 
     if (twin && !(op.kind === "move" && twin === op.from)) throw new OperationError(`${twin} already exists; note names can't differ only in case`);
   }
   switch (op.kind) {
-    case "write":
+    case "write": {
+      // Optimistic concurrency: the agent read the note outside this lock, so check it hasn't moved since.
+      const current = await read(op.path);
+      if (current === null && op.expectedVersion) throw new OperationError(`Conflict: ${op.path} was deleted after you read it. Nothing was saved.`, "conflict");
+      // already exactly this text (e.g. a retry after an "unknown" result whose push landed): nothing to protect
+      if (current !== null && current !== op.content) {
+        const now = await noteVersion(current);
+        if (!op.expectedVersion) throw new OperationError(`${op.path} already exists (version ${now}). Read it with read_note and pass its version as expected_version to overwrite it, or use edit_note. Nothing was saved.`, "conflict");
+        if (op.expectedVersion !== now) throw new OperationError(`Conflict: ${op.path} changed since you read it (you read version ${op.expectedVersion}, it is now ${now}). Nothing was saved. Read it again, redo your change on the current text, and retry with the new version.`, "conflict");
+      }
       return [{ path: op.path, content: op.content }];
+    }
     case "create":
       if ((await read(op.path)) !== null) throw new OperationError(`${op.path} already exists`, "exists");
       return [{ path: op.path, content: op.content }];
