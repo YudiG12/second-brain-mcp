@@ -37,7 +37,8 @@ def tile(n, c, s, i): return f'<div class="tile" style="width:{s}px;height:{s}px
 cl = [("claude", "#D97757", "Claude"), ("chat", "#0E9AA7", "ChatGPT"), ("terminal", "var(--ink)", "Claude Code"), ("apple", "var(--ink)", "Mac")]
 rows = "".join(f'<div style="display:flex;align-items:center;gap:12px">{tile(n, c, 40, 20)}<span style="font-weight:600;font-size:16px">{l}</span></div>' for n, c, l in cl)
 tags = "".join(f'<span style="font-size:13px;font-weight:600;padding:4px 9px;border-radius:4px;background:var(--tag-bg);color:var(--tag);border:1px solid var(--tag-line)">{t}</span>' for t in ["Workers", "Artifacts", "Durable Objects", "Queues", "Vectorize", "OAuth 2.1"])
-banner = HEAD + f'''<div style="width:1280px;height:300px;position:relative;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow:hidden">
+SUBS = "120K"  # YouTube subscribers, update when it grows
+banner = HEAD + f'''<div style="width:1280px;height:364px;position:relative;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow:hidden">
 <div style="position:absolute;left:64px;top:54px;width:660px">
  <div style="font-weight:800;font-size:62px;line-height:1.02;letter-spacing:-.03em">Second Brain MCP</div>
  <div style="font-size:21px;color:var(--muted);margin-top:14px;line-height:1.35">Your Markdown notes in every AI client,<br>with keyword and semantic search.</div>
@@ -49,6 +50,11 @@ banner = HEAD + f'''<div style="width:1280px;height:300px;position:relative;bord
 <div style="position:absolute;left:1036px;top:84px;width:180px;height:134px;border:1px solid var(--sand-line);background:var(--sand-bg);border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">
  {tile("file", "#B08A5A", 50, 26)}<div style="font-weight:700;color:var(--sand-ink);font-size:16px">One set of notes</div>
  <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--sand)">{ic("cloudflare", "#F38020", 15)}on Cloudflare</div></div>
+<div style="position:absolute;left:0;right:0;bottom:0;height:64px;border-top:1px solid var(--line);background:var(--sand-bg);display:flex;align-items:center;gap:12px;padding:0 64px">
+ <img src="avatar.jpg" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid var(--sand-line)">
+ <span style="font-size:15px;color:var(--muted)">A project by <b style="color:var(--ink);font-weight:700">Yudi Ganeko</b> · software engineer, code and dev careers</span>
+ <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)"><svg width="26" height="19" viewBox="0 0 18 13"><rect width="18" height="13" rx="3" fill="#E5322D"/><path d="M7 3.5v6l5-3z" fill="#fff"/></svg><b style="color:var(--ink);font-weight:700">{SUBS}</b> subscribers on YouTube</span>
+</div>
 </div></body></html>'''
 open(os.path.join(D, "banner.html"), "w").write(banner)
 
