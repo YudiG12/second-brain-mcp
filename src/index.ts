@@ -20,6 +20,7 @@ import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
+import { noteVersion } from "./writer/version";
 
 export { RepoWriter } from "./writer/durable";
 export { Reconcile } from "./reconcile/workflow";
@@ -129,10 +130,13 @@ function createServer() {
 
   server.registerTool(
     "read_note",
-    { description: "Reads a whole note by path (e.g. visao-geral.md, projetos/cafezinho.md).", inputSchema: { path: z.string() } },
+    { description: "Reads a whole note by path (e.g. visao-geral.md, projetos/cafezinho.md). Also returns its version, which write_note needs to overwrite it.", inputSchema: { path: z.string() } },
     async ({ path }) => {
       const p = checkPath(path); // same rules as writes (#30)
-      return text((await readNote(E.ARTIFACTS, p)) ?? `Note not found: ${p}`);
+      const body = await readNote(E.ARTIFACTS, p);
+      if (body === null) return text(`Note not found: ${p}`);
+      // the version goes in its own block, so an agent rewriting the note doesn't copy it into the content
+      return { content: [{ type: "text" as const, text: body }, { type: "text" as const, text: `version: ${await noteVersion(body)}` }] };
     },
   );
 
@@ -195,10 +199,13 @@ function createServer() {
 
   server.registerTool(
     "write_note",
-    { description: "Creates or overwrites a whole note in any folder (e.g. projetos/cafezinho.md). To change only part of it, prefer edit_note.", inputSchema: { path: z.string(), content: z.string() } },
-    async ({ path, content }) => {
+    {
+      description: "Creates a note, or overwrites a whole one (e.g. projetos/cafezinho.md). To overwrite, pass expected_version: the version read_note returned. If the note changed since, nothing is saved and you get a conflict: read it again and redo the change. To change only part of a note, prefer edit_note.",
+      inputSchema: { path: z.string(), content: z.string(), expected_version: z.string().optional() },
+    },
+    async ({ path, content, expected_version }) => {
       const p = checkPath(path);
-      return text(await write({ kind: "write", path: p, content }, `Saved: ${p}`));
+      return text(await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}) }, `Saved: ${p}`));
     },
   );
 

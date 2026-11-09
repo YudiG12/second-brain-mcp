@@ -3,7 +3,7 @@
 // in production, an in-memory fake in tests.
 
 export type Operation =
-  | { kind: "write"; path: string; content: string }
+  | { kind: "write"; path: string; content: string; expectedVersion?: string } // overwriting needs the version read_note returned
   | { kind: "create"; path: string; content: string } // fails with code "exists" if the note exists
   | { kind: "edit"; path: string; oldText: string; newText: string }
   | { kind: "delete"; path: string }
@@ -14,7 +14,7 @@ export type Change = { path: string; content: string | null };
 
 export type WriteResult =
   | { status: "ok"; commit: string; paths: string[]; changes: Change[] } // changes: exactly what was committed
-  | { status: "failed"; reason: string; code?: "exists" } // nothing was written
+  | { status: "failed"; reason: string; code?: "exists" | "conflict" } // nothing was written
   | { status: "busy" } // the branch kept moving; nothing was written
   | { status: "unknown"; reason: string }; // the push may or may not have landed
 
