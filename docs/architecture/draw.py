@@ -54,9 +54,22 @@ def devices(cx, y, names, label):
     t = "".join(f'<g transform="translate({x + i*20},{y - 13}) scale(0.67)" fill="none" stroke="{MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[n]}</g>' for i, n in enumerate(names))
     return t + f'<text x="{x + iw + 6}" y="{y}" class="c">{html.escape(label)}</text>'
 
-def arrow(points, label=None, at=0.5, both=False):
+FLOW = dict(auth=LINE, write="#5B5BD6", index="#E08A3C", read="#2F8A5B")
+FLOW_MARKERS = "".join(f'<marker id="m-{k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{v}"/></marker>' for k, v in FLOW.items())
+
+def legend(x, y, items):
+    """Flow names: a short coloured line and its name, in a row."""
+    t = ""
+    for k, name in items:
+        t += f'<path d="M{x},{y} L{x+28},{y}" class="a" style="stroke:{FLOW[k]};stroke-width:2.2"/><text x="{x+36}" y="{y+4}" class="lg">{html.escape(name)}</text>'
+        x += 50 + 7.4 * len(name)
+    return t
+
+def arrow(points, label=None, at=0.5, both=False, flow=None):
     d = "M" + " L".join(f"{x},{y}" for x, y in points)
-    t = f'<path d="{d}" class="a" marker-end="url(#m)"{" marker-start=\"url(#ms)\"" if both else ""}/>'
+    style = f' style="stroke:{FLOW[flow]};stroke-width:2.2"' if flow else ""
+    end = f"m-{flow}" if flow else "m"
+    t = f'<path d="{d}" class="a"{style} marker-end="url(#{end})"{" marker-start=\"url(#ms)\"" if both else ""}/>'
     if label:
         # label on the longest segment
         segs = list(zip(points, points[1:]))
@@ -71,10 +84,11 @@ def svg(width, height, title, subtitle, body):
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" font-family="Onest, Inter, system-ui, sans-serif">
 <defs>
 <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>
+{FLOW_MARKERS}
 <marker id="ms" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>
 <style>.t{{fill:#fff;font-size:15px;font-weight:700}}.s{{fill:#fff;font-size:12px;opacity:.92}}.c{{fill:{MUTED};font-size:12px}}
 .a{{fill:none;stroke:{LINE};stroke-width:1.6;stroke-dasharray:6 5}}.p{{fill:#fff;font-size:11.5px;font-weight:600}}
-.h{{fill:{NAVY};font-size:22px;font-weight:800}}.hs{{fill:{MUTED};font-size:13px}}.g{{fill:none;stroke:#E6D5C1;stroke-width:1.5;stroke-dasharray:2 4}}.gl{{fill:#8C6A43;font-size:12px;font-weight:600}}</style>
+.h{{fill:{NAVY};font-size:22px;font-weight:800}}.hs{{fill:{MUTED};font-size:13px}}.g{{fill:none;stroke:#E6D5C1;stroke-width:1.5;stroke-dasharray:2 4}}.gl{{fill:#8C6A43;font-size:12px;font-weight:600}}.lg{{fill:{NAVY};font-size:13px;font-weight:600}}.ft{{font-size:12px;font-weight:700;letter-spacing:.06em}}</style>
 </defs>
 <rect width="100%" height="100%" fill="{BG}"/>
 <text x="32" y="44" class="h">{html.escape(title)}</text><text x="32" y="66" class="hs">{html.escape(subtitle)}</text>
@@ -123,25 +137,27 @@ v2.append(box(X2, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
 v2.append(box(X1, 700, "D1", "manifest · FTS5 · alerts", "red", icons=("database",)))
 v2.append(box(X2, 700, "Workers AI", "bge-m3 embeddings", "teal", icons=("sparkles",)))
 v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
-# into the Worker
-v2.append(arrow([(260, 152), (370, 152), (370, 264), (440, 264)], "sign in", at=0.5))
-v2.append(arrow([(260, 282), (440, 282)], "OAuth"))
-v2.append(arrow([(260, 402), (320, 402), (320, 302), (440, 302)], "OAuth", at=0.5))
-v2.append(arrow([(550, 250), (550, 174)], "grants"))
-# row 1: the write
-v2.append(arrow([(660, 282), (800, 282)], "operations"))
-v2.append(arrow([(1020, 282), (1160, 282)], "git push"))
-v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read", at=0.75))
-# row 2: into the Queue
-v2.append(arrow([(620, 314), (620, 430), (860, 430), (860, 480)], "enqueue", at=0.5))
-v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], "pushed event", at=0.5))
-v2.append(arrow([(660, 512), (800, 512)], "fixes"))
-# row 3: the consumer indexes
-v2.append(arrow([(840, 544), (840, 620), (550, 620), (550, 700)], "record", at=0.5))
-v2.append(arrow([(910, 544), (910, 700)], "embed", at=0.6))
-v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], "upsert", at=0.5))
-# search reads both indexes
-v2.append(arrow([(440, 310), (418, 310), (418, 732), (440, 732)], "search", at=0.35))
-v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)]))
-open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 870, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
+# flows: colour says which one; the name is said once, not on every arrow
+ft = lambda x, y, k, name: f'<text x="{x}" y="{y}" class="ft" fill="{FLOW[k]}">{html.escape(name)}</text>'
+v2.append(legend(440, 858, [("auth", "MCP calls with OAuth"), ("write", "write the note"), ("index", "write the index and embeddings"), ("read", "read and search")]))
+# sign-in
+v2.append(arrow([(260, 152), (370, 152), (370, 264), (440, 264)], flow="auth"))
+v2.append(arrow([(550, 250), (550, 174)], flow="auth"))
+# write the note: client -> Worker -> RepoWriter -> Artifacts
+v2.append(arrow([(260, 282), (440, 282)], flow="auth"))
+v2.append(arrow([(260, 402), (320, 402), (320, 302), (440, 302)], flow="auth"))
+v2.append(arrow([(660, 282), (800, 282)], flow="write"))
+v2.append(arrow([(1020, 282), (1160, 282)], flow="write"))
+# index it: into the Queue, then the consumer writes the indexes
+v2.append(arrow([(620, 314), (620, 430), (860, 430), (860, 480)], flow="index"))
+v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], flow="index"))
+v2.append(arrow([(660, 512), (800, 512)], flow="index"))
+v2.append(arrow([(840, 544), (840, 620), (550, 620), (550, 700)], flow="index"))
+v2.append(arrow([(910, 544), (910, 700)], flow="index"))
+v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], flow="index"))
+# read and search
+v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], flow="read"))
+v2.append(arrow([(440, 310), (418, 310), (418, 732), (440, 732)], flow="read"))
+v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)], flow="read"))
+open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 890, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
