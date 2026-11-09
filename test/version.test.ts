@@ -65,4 +65,14 @@ describe("write_note: optimistic concurrency on overwrites", () => {
     const r = await writer.run({ kind: "write", path: "a.md", content: "x", expectedVersion: await noteVersion("alpha\n") });
     expect(r).toMatchObject({ status: "failed", code: "conflict" });
   });
+
+  it("accepts a retry whose text is already there (a push that landed but reported unknown)", async () => {
+    const v = await noteVersion("alpha\n");
+    await writer.run({ kind: "write", path: "a.md", content: "mine", expectedVersion: v });
+    expect((await writer.run({ kind: "write", path: "a.md", content: "mine", expectedVersion: v })).status).toBe("ok");
+  });
+
+  it("ignores a leading BOM, so read_note and the writer agree on the version", async () => {
+    expect(await noteVersion("\uFEFFalpha\n")).toBe(await noteVersion("alpha\n"));
+  });
 });
