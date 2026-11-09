@@ -17,10 +17,17 @@ SECRET=${HOOK_SECRET:-$(security find-generic-password -s second-brain-hook -w 2
 RES=$(printf 'header = "Authorization: Bearer %s"\n' "$SECRET" | curl -fsS -m 15 --config - -X POST "$URL/hook/artifacts-token")
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $(printf '%s' "$RES" | json token)"
 
+REMOTE=$(printf '%s' "$RES" | json remote)
 if [ -d "$DIR/.git" ]; then
+  # reset --hard wipes local changes: only ever do it to a mirror of this notes repo
+  case "$(git -C "$DIR" remote get-url origin 2>/dev/null)" in
+    */"$(basename "$REMOTE")") ;;
+    *) echo "$DIR is a Git repo but not a mirror of the notes; pick another folder" >&2; exit 1;;
+  esac
+  git -C "$DIR" remote set-url origin "$REMOTE"
   git -C "$DIR" fetch -q origin main
   git -C "$DIR" reset -q --hard origin/main
 else
-  git clone -q --branch main "$(printf '%s' "$RES" | json remote)" "$DIR"
+  git clone -q --branch main "$REMOTE" "$DIR"
 fi
 echo "ok: $DIR at $(git -C "$DIR" rev-parse --short HEAD)"

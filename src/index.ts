@@ -259,12 +259,12 @@ const app = {
     if (url.pathname === "/authorize") return authorize(request, envArg);
     if (url.pathname === "/callback" && request.method === "GET") return callback(request, envArg);
 
-    // a 1-hour token for the notes repo, for the optional read-only mirror (scripts/mirror.sh, ADR 014).
-    // Its own secret, which can do nothing else: a leak from the Mac can't reach the admin routes (#39).
+    // a 1-hour READ token for the notes repo, for the optional read-only mirror (scripts/mirror.sh, ADR 014).
+    // Read-only, so a leaked secret can't push around the Durable Object; and it can't reach the admin routes (#39).
     if (url.pathname === "/hook/artifacts-token" && request.method === "POST") {
       if (!(await hasBearer(request, envArg.HOOK_SECRET))) return new Response("Not found", { status: 404 });
       using repo = await envArg.ARTIFACTS.get(envArg.NOTES_REPO);
-      const [info, tok] = await Promise.all([repo.info(), repo.createToken("write", 3600)]);
+      const [info, tok] = await Promise.all([repo.info(), repo.createToken("read", 3600)]);
       return Response.json({ remote: info.remote, token: tok.plaintext.split("?")[0], expiresAt: tok.expiresAt }, { headers: { "Cache-Control": "no-store" } });
     }
 
