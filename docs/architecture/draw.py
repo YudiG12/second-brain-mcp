@@ -101,41 +101,47 @@ open(os.path.join(os.path.dirname(__file__), "v1.svg"), "w").write(svg(1120, 650
 
 # ---------- v2 ----------
 # Columns: outside (A) | Worker & runners (B) | storage & queue (C) | indexes & AI (D)
-A, B, Cx, D = 40, 420, 800, 1180
-# top to bottom = the order a write happens: client, Worker, writer, Artifacts, Queue, indexes.
-# Side columns: things used on the way (KV at sign-in, Workers AI for embeddings) or on a schedule (Workflow).
+A, X1, X2, X3 = 40, 440, 800, 1160
+# Read it like text, left to right, row by row:
+#   row 1, the write: Worker -> RepoWriter -> Artifacts
+#   row 2, indexing in the background: Workflow (daily repair) -> Queue
+#   row 3, the indexes: D1, Workers AI (embeddings), Vectorize
 v2 = []
-v2.append('<rect x="390" y="92" width="1040" height="900" rx="10" class="g"/>' + f'<path transform="translate(404,98) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="428" y="112" class="gl">CLOUDFLARE</text>')
+v2.append('<rect x="400" y="80" width="1020" height="760" rx="10" class="g"/>' + f'<path transform="translate(414,86) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="438" y="100" class="gl">CLOUDFLARE</text>')
 v2.append(box(A, 120, "GitHub", "sign-in only", "slate", "owner's account, no scopes", icons=("github",)))
 v2.append(box(A, 250, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 332, ("monitor", "smartphone"), "Mac (web) and phone"))
 v2.append(box(A, 370, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 452, ("laptop",), "on the MacBook"))
-v2.append(box(B, 250, "1 · Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
-v2.append(box(Cx, 130, "KV", "OAuth grants", "slate", "hashed tokens", icons=("key",)))
-v2.append(box(B, 410, "2 · RepoWriter", "Durable Object · mutex", "purple", icons=("lock",)))
-v2.append(box(B, 570, "3 · Artifacts", "Git · source of truth", "green", icons=("branch",)))
-v2.append(box(Cx, 410, "Workflow", "reconcile · daily", "orange", icons=("workflow",)))
-v2.append(box(B, 730, "4 · Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
-v2.append(box(D, 730, "Workers AI", "bge-m3", "teal", w=210, icons=("sparkles",)))
-v2.append(box(B, 890, "5 · Vectorize", "semantic index", "teal", icons=("search",)))
-v2.append(box(Cx, 890, "5 · D1", "manifest · FTS5 · alerts", "red", icons=("database",)))
+v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
+# row 1
+v2.append(box(X1, 250, "Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
+v2.append(box(X2, 250, "RepoWriter", "Durable Object · mutex", "purple", icons=("lock",)))
+v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
+# row 2
+v2.append(box(X1, 480, "Workflow", "reconcile · daily", "orange", icons=("workflow",)))
+v2.append(box(X2, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
+# row 3
+v2.append(box(X1, 700, "D1", "manifest · FTS5 · alerts", "red", icons=("database",)))
+v2.append(box(X2, 700, "Workers AI", "bge-m3 embeddings", "teal", icons=("sparkles",)))
+v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
 # into the Worker
-v2.append(arrow([(260, 152), (370, 152), (370, 262), (420, 262)], "sign in", at=0.5))
-v2.append(arrow([(260, 278), (420, 278)], "OAuth"))
-v2.append(arrow([(260, 402), (310, 402), (310, 300), (420, 300)], "OAuth", at=0.5))
-v2.append(arrow([(600, 250), (600, 162), (800, 162)], "grants", at=0.5))
-# the write, top to bottom
-v2.append(arrow([(530, 314), (530, 410)], "operations"))
-v2.append(arrow([(530, 474), (530, 570)], "git push"))
-v2.append(arrow([(530, 634), (530, 730)], "pushed event"))
-v2.append(arrow([(640, 290), (700, 290), (700, 742), (640, 742)], "enqueue", at=0.2))
-# reads and search
-v2.append(arrow([(640, 270), (740, 270), (740, 602), (640, 602)], "read", at=0.75))
-v2.append(arrow([(640, 258), (1120, 258), (1120, 922), (1020, 922)], "search", at=0.3))
-v2.append(arrow([(1120, 940), (1120, 970), (530, 970), (530, 954)]))
-# indexing
-v2.append(arrow([(910, 474), (910, 782), (640, 782)], "fixes", at=0.4))
-v2.append(arrow([(640, 760), (1180, 760)], "embed", at=0.78))
-v2.append(arrow([(500, 794), (500, 890)], "upsert"))
-v2.append(arrow([(600, 794), (600, 850), (870, 850), (870, 890)], "record", at=0.6))
-open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 1010, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
+v2.append(arrow([(260, 152), (370, 152), (370, 264), (440, 264)], "sign in", at=0.5))
+v2.append(arrow([(260, 282), (440, 282)], "OAuth"))
+v2.append(arrow([(260, 402), (320, 402), (320, 302), (440, 302)], "OAuth", at=0.5))
+v2.append(arrow([(550, 250), (550, 174)], "grants"))
+# row 1: the write
+v2.append(arrow([(660, 282), (800, 282)], "operations"))
+v2.append(arrow([(1020, 282), (1160, 282)], "git push"))
+v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read", at=0.75))
+# row 2: into the Queue
+v2.append(arrow([(620, 314), (620, 430), (860, 430), (860, 480)], "enqueue", at=0.5))
+v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], "pushed event", at=0.5))
+v2.append(arrow([(660, 512), (800, 512)], "fixes"))
+# row 3: the consumer indexes
+v2.append(arrow([(840, 544), (840, 620), (550, 620), (550, 700)], "record", at=0.5))
+v2.append(arrow([(910, 544), (910, 700)], "embed", at=0.6))
+v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], "upsert", at=0.5))
+# search reads both indexes
+v2.append(arrow([(440, 310), (418, 310), (418, 732), (440, 732)], "search", at=0.35))
+v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)]))
+open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 870, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
