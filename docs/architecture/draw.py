@@ -24,26 +24,33 @@ LUCIDE = {
     "monitor": '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
 }
 
-def glyph(name, x, y, size=26):
+def glyph(name, x, y, size=26, color="#fff"):
     """A white icon at (x, y): a brand mark (filled) or a Lucide icon (stroked)."""
     k = size / 24
     if name in BRANDS:
-        return f'<path transform="translate({x},{y}) scale({k})" d="{BRANDS[name]}" fill="#fff"/>'
-    return f'<g transform="translate({x},{y}) scale({k})" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[name]}</g>'
+        return f'<path transform="translate({x},{y}) scale({k})" d="{BRANDS[name]}" fill="{color}"/>'
+    return f'<g transform="translate({x},{y}) scale({k})" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[name]}</g>'
 
 C = dict(indigo="#5B5BD6", purple="#8E6FCB", teal="#3FA796", green="#2F8A5B", red="#D1495B", orange="#E08A3C", slate="#4A5866")
 NAVY, MUTED, BG, LINE = "#1B2632", "#4A5D72", "#FCFAF7", "#677A8E"
 W, H = 220, 64
 
-def box(x, y, title, sub, color, caption=None, w=W, icons=()):
-    t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}"/>'
+def box(x, y, title, sub, color, caption=None, w=W, icons=(), kind="service"):
+    """kind: service = managed resource (solid); part = a class inside the Worker (outlined); api = no resource, only called (dashed)."""
+    ink = "#fff" if kind == "service" else C[color]
+    if kind == "service":
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}"/>'
+    elif kind == "part":
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="#fff" stroke="{C[color]}" stroke-width="2"/>'
+    else:
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="#fff" stroke="{C[color]}" stroke-width="2" stroke-dasharray="5 4"/>'
     # icons on the left; text centred in the space that's left
     for i, name in enumerate(icons):
-        t += glyph(name, x + 14 + i * 32, y + 19)
+        t += glyph(name, x + 14 + i * 32, y + 19, color=ink)
     left = x + (14 + 32 * len(icons) if icons else 0)
     cx = left + (x + w - left) / 2
-    t += f'<text x="{cx}" y="{y + 27}" text-anchor="middle" class="t">{html.escape(title)}</text>'
-    t += f'<text x="{cx}" y="{y + 47}" text-anchor="middle" class="s">{html.escape(sub)}</text>'
+    t += f'<text x="{cx}" y="{y + 27}" text-anchor="middle" class="t" style="fill:{ink}">{html.escape(title)}</text>'
+    t += f'<text x="{cx}" y="{y + 47}" text-anchor="middle" class="s" style="fill:{ink}">{html.escape(sub)}</text>'
     if caption:
         t += f'<text x="{x + w/2}" y="{y + H + 18}" text-anchor="middle" class="c">{html.escape(caption)}</text>'
     return t
@@ -129,20 +136,25 @@ v2.append('<rect x="24" y="236" width="252" height="236" rx="10" class="g"/><tex
 v2.append(box(A, 260, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 342, ("monitor", "smartphone"), "Mac (web) and phone"))
 v2.append(box(A, 376, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 458, ("laptop",), "on the MacBook"))
 v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
+# The Worker is one deployable; the Durable Object and the Workflow are classes inside it, created by its deploy.
+v2.append('<path d="M424,232 H1036 V336 H690 V572 H424 Z" fill="#5B5BD6" fill-opacity="0.05" stroke="#5B5BD6" stroke-width="1.5" stroke-dasharray="6 4" rx="8"/>'
+          '<text x="436" y="564" class="gl" fill="#5B5BD6" style="fill:#5B5BD6">WORKER · second-brain-mcp</text>')
 # row 1
-v2.append(box(X1, 250, "Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
-v2.append(box(X2, 250, "RepoWriter", "Durable Object · mutex", "purple", icons=("lock",)))
+v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",), kind="part"))
+v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "purple", icons=("lock",), kind="part"))
 v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
 # row 2
-v2.append(box(X1, 480, "Workflow", "runs daily", "orange", icons=("workflow",)))
+v2.append(box(X1, 480, "Reconcile", "Workflow · runs daily", "orange", icons=("workflow",), kind="part"))
 v2.append(box(X2, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
 # row 3
 v2.append(box(X1, 700, "D1", "manifest · keyword index", "red", icons=("database",)))
-v2.append(box(X2, 700, "Workers AI", "bge-m3 embeddings", "teal", icons=("sparkles",)))
+v2.append(box(X2, 700, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"))
 v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
 # flows: colour says which one; the name is said once, not on every arrow
 ft = lambda x, y, k, name: f'<text x="{x}" y="{y}" class="ft" fill="{FLOW[k]}">{html.escape(name)}</text>'
 # sign-in and MCP calls: the three clients bend at the same x and enter the Worker evenly spaced
+lk = lambda x, kind, c, name: (f'<rect x="{x}" y="812" width="22" height="14" rx="3" fill="{c if kind=="service" else "#fff"}" stroke="{c}" stroke-width="1.6"{" stroke-dasharray=\"4 3\"" if kind=="api" else ""}/>' f'<text x="{x+30}" y="824" class="c">{name}</text>')
+v2.append(lk(440, "service", C["green"], "managed service (its own resource)") + lk(720, "part", C["purple"], "part of the Worker (your code)") + lk(960, "api", C["teal"], "API, called only"))
 v2.append(arrow([(260, 156), (340, 156), (340, 258), (440, 258)], flow="auth"))
 v2.append(arrow([(260, 292), (440, 292)], "MCP + OAuth", at=0.38, flow="auth"))
 v2.append(arrow([(260, 408), (340, 408), (340, 306), (440, 306)], flow="auth"))
