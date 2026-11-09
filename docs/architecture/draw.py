@@ -122,9 +122,12 @@ A, X1, X2, X3 = 40, 440, 800, 1160
 #   row 3, the indexes: D1, Workers AI (embeddings), Vectorize
 v2 = []
 v2.append('<rect x="400" y="80" width="1020" height="760" rx="10" class="g"/>' + f'<path transform="translate(414,86) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="438" y="100" class="gl">CLOUDFLARE</text>')
-v2.append(box(A, 120, "GitHub", "sign-in only", "slate", "owner's account, no scopes", icons=("github",)))
-v2.append(box(A, 250, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 332, ("monitor", "smartphone"), "Mac (web) and phone"))
-v2.append(box(A, 370, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 452, ("laptop",), "on the MacBook"))
+# GitHub is only the identity provider: its own group, apart from the MCP clients
+v2.append('<rect x="24" y="92" width="252" height="128" rx="10" class="g"/><text x="38" y="112" class="gl">SIGN-IN PROVIDER</text>')
+v2.append(box(A, 124, "GitHub", "identity only", "slate", "owner's account, no scopes", icons=("github",)))
+v2.append('<rect x="24" y="236" width="252" height="236" rx="10" class="g"/><text x="38" y="256" class="gl">MCP CLIENTS</text>')
+v2.append(box(A, 260, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 342, ("monitor", "smartphone"), "Mac (web) and phone"))
+v2.append(box(A, 376, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 458, ("laptop",), "on the MacBook"))
 v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
 # row 1
 v2.append(box(X1, 250, "Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
@@ -140,9 +143,9 @@ v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",))
 # flows: colour says which one; the name is said once, not on every arrow
 ft = lambda x, y, k, name: f'<text x="{x}" y="{y}" class="ft" fill="{FLOW[k]}">{html.escape(name)}</text>'
 # sign-in and MCP calls: the three clients bend at the same x and enter the Worker evenly spaced
-v2.append(arrow([(260, 152), (340, 152), (340, 266), (440, 266)], flow="auth"))
-v2.append(arrow([(260, 282), (440, 282)], "MCP + OAuth", at=0.55, flow="auth"))
-v2.append(arrow([(260, 402), (340, 402), (340, 298), (440, 298)], flow="auth"))
+v2.append(arrow([(260, 156), (340, 156), (340, 258), (440, 258)], flow="auth"))
+v2.append(arrow([(260, 292), (440, 292)], "MCP + OAuth", at=0.38, flow="auth"))
+v2.append(arrow([(260, 408), (340, 408), (340, 306), (440, 306)], flow="auth"))
 v2.append(arrow([(550, 250), (550, 174)], flow="auth"))
 # write the note: Worker -> RepoWriter -> Artifacts
 v2.append(arrow([(660, 282), (800, 282)], flow="write"))
@@ -158,7 +161,7 @@ v2.append(arrow([(910, 544), (910, 700)], flow="index"))
 v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], "write embeddings", flow="index"))
 # read and search
 v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read a note", at=0.5, flow="read"))
-v2.append(arrow([(440, 310), (418, 310), (418, 732), (440, 732)], flow="read"))
+v2.append(arrow([(440, 274), (418, 274), (418, 732), (440, 732)], flow="read"))
 v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)], "search", flow="read"))
 
 open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 860, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
