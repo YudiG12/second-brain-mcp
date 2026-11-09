@@ -136,45 +136,46 @@ v2.append('<rect x="24" y="236" width="252" height="236" rx="10" class="g"/><tex
 v2.append(box(A, 260, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 342, ("monitor", "smartphone"), "Mac (web) and phone"))
 v2.append(box(A, 376, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 458, ("laptop",), "on the MacBook"))
 v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
-# The Worker is one deployable; the Durable Object and the Workflow are classes inside it, created by its deploy.
-v2.append('<path d="M424,232 H1036 V336 H690 V572 H424 Z" fill="#5B5BD6" fill-opacity="0.05" stroke="#5B5BD6" stroke-width="1.5" stroke-dasharray="6 4" rx="8"/>'
-          '<text x="436" y="564" class="gl" fill="#5B5BD6" style="fill:#5B5BD6">WORKER · second-brain-mcp</text>')
-# row 1
-v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",), kind="part"))
-v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "purple", icons=("lock",), kind="part"))
+# The Worker is one deployable: an area holding its four parts (all your code, created by its deploy).
+# Outside it, managed services; Workers AI is only called (dashed).
+v2.append('<rect x="424" y="232" width="612" height="342" rx="8" fill="#5B5BD6" fill-opacity="0.06" stroke="#5B5BD6" stroke-width="1.5" stroke-dasharray="6 4"/>'
+          '<text x="436" y="566" class="gl" style="fill:#5B5BD6">WORKER · second-brain-mcp · your code</text>')
+# row 1: the write
+v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",)))
+v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "purple", icons=("lock",)))
 v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
-# row 2
-v2.append(box(X1, 480, "Reconcile", "Workflow · runs daily", "orange", icons=("workflow",), kind="part"))
-v2.append(box(X2, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
-# row 3
+# row 2: indexing
+v2.append(box(X1, 480, "Reconcile", "Workflow · runs daily", "orange", icons=("workflow",)))
+v2.append(box(X2, 480, "Queue consumer", "the only index writer", "orange", icons=("workers",)))
+v2.append(box(X3, 480, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
+# row 3: the indexes, and the model the consumer calls
 v2.append(box(X1, 700, "D1", "manifest · keyword index", "red", icons=("database",)))
 v2.append(box(X2, 700, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"))
 v2.append(box(X3, 700, "Vectorize", "semantic index", "teal", icons=("search",)))
-# flows: colour says which one; the name is said once, not on every arrow
-ft = lambda x, y, k, name: f'<text x="{x}" y="{y}" class="ft" fill="{FLOW[k]}">{html.escape(name)}</text>'
-# sign-in and MCP calls: the three clients bend at the same x and enter the Worker evenly spaced
-lk = lambda x, kind, c, name: (f'<rect x="{x}" y="812" width="22" height="14" rx="3" fill="{c if kind=="service" else "#fff"}" stroke="{c}" stroke-width="1.6"{" stroke-dasharray=\"4 3\"" if kind=="api" else ""}/>' f'<text x="{x+30}" y="824" class="c">{name}</text>')
-v2.append(lk(440, "service", C["green"], "managed service (its own resource)") + lk(720, "part", C["purple"], "part of the Worker (your code)") + lk(960, "api", C["teal"], "API, called only"))
+lk = lambda x, kind, c, name: (f'<rect x="{x}" y="812" width="22" height="14" rx="3" fill="{c if kind!="api" else "#fff"}"{" fill-opacity=\"0.12\"" if kind=="area" else ""} stroke="{c}" stroke-width="1.6"{" stroke-dasharray=\"4 3\"" if kind in ("api","area") else ""}/>' f'<text x="{x+30}" y="824" class="c">{name}</text>')
+v2.append(lk(440, "area", "#5B5BD6", "Worker: parts inside are your code") + lk(740, "service", C["green"], "managed service") + lk(920, "api", C["teal"], "API, only called"))
+# sign-in and MCP calls
 v2.append(arrow([(260, 156), (340, 156), (340, 258), (440, 258)], flow="auth"))
 v2.append(arrow([(260, 292), (440, 292)], "MCP + OAuth", at=0.38, flow="auth"))
 v2.append(arrow([(260, 408), (340, 408), (340, 306), (440, 306)], flow="auth"))
 v2.append(arrow([(550, 250), (550, 174)], flow="auth"))
-# write the note: Worker -> RepoWriter -> Artifacts
+# write the note
 v2.append(arrow([(660, 282), (800, 282)], flow="write"))
-v2.append(arrow([(1020, 282), (1160, 282)], flow="write"))
 v2.append(arrow([(660, 282), (800, 282)], "write the note", flow="write", dy=-22))
-# index it: into the Queue, then the consumer writes the indexes
-v2.append(arrow([(620, 314), (620, 430), (860, 430), (860, 480)], flow="index"))
-v2.append(arrow([(1270, 314), (1270, 430), (960, 430), (960, 480)], "index in the background", flow="index"))
-v2.append(arrow([(660, 512), (800, 512)], flow="index"))
-v2.append(arrow([(660, 512), (800, 512)], "reconciliation", flow="index", dy=-22))
-v2.append(arrow([(840, 544), (840, 620), (550, 620), (550, 700)], flow="index"))
-v2.append(arrow([(910, 544), (910, 700)], flow="index"))
-v2.append(arrow([(980, 544), (980, 620), (1270, 620), (1270, 700)], "write embeddings", flow="index"))
+v2.append(arrow([(1020, 282), (1160, 282)], flow="write"))
+# into the Queue: enqueue after a write, the push event, and the daily repair
+v2.append(arrow([(620, 314), (620, 420), (1240, 420), (1240, 480)], flow="index"))
+v2.append(arrow([(1300, 314), (1300, 480)], "index in the background", flow="index"))
+v2.append(arrow([(550, 480), (550, 452), (1196, 452), (1196, 480)], "reconciliation", at=0.2, flow="index"))
+# the consumer takes jobs, asks for embeddings, writes both indexes
+v2.append(arrow([(1160, 512), (1020, 512)], flow="index"))
+v2.append(arrow([(840, 544), (840, 650), (550, 650), (550, 700)], flow="index"))
+v2.append(arrow([(910, 544), (910, 700)], "embed", at=0.75, flow="index"))
+v2.append(arrow([(980, 544), (980, 650), (1270, 650), (1270, 700)], "write embeddings", at=0.5, flow="index"))
 # read and search
 v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read a note", at=0.5, flow="read"))
 v2.append(arrow([(440, 274), (418, 274), (418, 732), (440, 732)], flow="read"))
-v2.append(arrow([(418, 732), (418, 800), (1270, 800), (1270, 764)], "search", flow="read"))
+v2.append(arrow([(418, 732), (418, 790), (1270, 790), (1270, 764)], "search", flow="read"))
 
 open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 860, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
