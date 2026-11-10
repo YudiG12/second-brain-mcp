@@ -62,7 +62,7 @@ def devices(cx, y, names, label):
     t = "".join(f'<g transform="translate({x + i*20},{y - 13}) scale(0.67)" fill="none" stroke="{MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[n]}</g>' for i, n in enumerate(names))
     return t + f'<text x="{x + iw + 6}" y="{y}" class="c">{html.escape(label)}</text>'
 
-FLOW = dict(auth=LINE, write="#5B5BD6", index="#E08A3C", read="#2F8A5B")
+FLOW = dict(auth=LINE, write="#5B5BD6", index="#E08A3C", read="#2F8A5B", fail="#D1495B")
 FLOW_MARKERS = "".join(f'<marker id="m-{k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{v}"/></marker>' for k, v in FLOW.items())
 
 def legend(x, y, items):
@@ -123,13 +123,13 @@ open(os.path.join(os.path.dirname(__file__), "v1.svg"), "w").write(svg(1120, 650
 
 # ---------- v2 ----------
 # Columns: outside (A) | Worker & runners (B) | storage & queue (C) | indexes & AI (D)
-A, X1, X2, X3 = 40, 440, 800, 1160
+A, X1, X2, X3, X4 = 40, 440, 800, 1160, 1520
 # Read it like text, left to right, row by row:
 #   row 1, the write: Worker -> RepoWriter -> Artifacts
 #   row 2, indexing in the background: Workflow (daily repair) -> Queue
 #   row 3, the indexes: D1, Workers AI (embeddings), Vectorize
 v2 = []
-v2.append('<rect x="376" y="80" width="1044" height="640" rx="10" class="g"/>' + f'<path transform="translate(390,86) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="414" y="100" class="gl">CLOUDFLARE</text>')
+v2.append('<rect x="376" y="80" width="1404" height="680" rx="10" class="g"/>' + f'<path transform="translate(390,86) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="414" y="100" class="gl">CLOUDFLARE</text>')
 # GitHub is only the identity provider: its own group, apart from the MCP clients
 v2.append('<rect x="24" y="92" width="252" height="128" rx="10" class="g"/><text x="38" y="112" class="gl">SIGN-IN PROVIDER</text>')
 v2.append(box(A, 124, "GitHub", "identity only", "slate", "owner's account, no scopes", icons=("github",)))
@@ -148,9 +148,10 @@ v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("b
 # row 2: indexing
 v2.append(box(X1, 410, "Reconcile", "Workflow · runs daily", "indigo", icons=("workflow",), kind="part"))
 v2.append(box(X2, 410, "Queue consumer", "the only index writer", "indigo", icons=("workers",), kind="part"))
-v2.append(box(X3, 410, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
+v2.append(box(X3, 410, "Queue", "index-jobs · 5 tries", "orange", icons=("queue",)))
 # row 3: the indexes, and the model the consumer calls
-v2.append(box(X1, 600, "D1", "manifest · keyword index", "red", icons=("database",)))
+v2.append(box(X4, 410, "DLQ", "index-jobs-dlq", "red", icons=("queue",)))
+v2.append(box(X1, 600, "D1", "manifest · index · alerts", "red", icons=("database",)))
 v2.append(box(X2, 600, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"))
 v2.append(box(X3, 600, "Vectorize", "semantic index", "teal", icons=("search",)))
 # sign-in and MCP calls
@@ -171,10 +172,14 @@ v2.append(arrow([(1160, 442), (1020, 442)], flow="index"))
 v2.append(arrow([(840, 474), (840, 548), (550, 548), (550, 600)], flow="index"))
 v2.append(arrow([(910, 474), (910, 600)], "embed", at=0.7, flow="index"))
 v2.append(arrow([(980, 474), (980, 548), (1270, 548), (1270, 600)], "write embeddings", at=0.5, flow="index"))
+# a job that fails 5 times goes to the DLQ; its consumer records an alert in D1
+v2.append(arrow([(1380, 442), (1520, 442)], flow="fail"))
+v2.append(arrow([(1380, 442), (1520, 442)], "5 failures", flow="fail", dy=-22))
+v2.append(arrow([(1630, 474), (1630, 730), (500, 730), (500, 664)], "alert row", at=0.5, flow="fail"))
 # read and search
 v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read a note", at=0.5, flow="read"))
 v2.append(arrow([(440, 274), (394, 274), (394, 632), (440, 632)], flow="read"))
 v2.append(arrow([(394, 632), (394, 690), (1270, 690), (1270, 664)], "search", flow="read"))
 
-open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 750, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
+open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1820, 790, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
