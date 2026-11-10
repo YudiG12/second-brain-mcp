@@ -55,19 +55,19 @@ In the plan note, change the deadline to Friday.
 
 ![Architecture of v2](docs/architecture/v2.png)
 
-<img src="docs/architecture/flows/1-sign-in.png" alt="Flow 1-sign-in" width="760">
+<p align="center"><img src="docs/architecture/flows/1-sign-in.png" alt="Flow 1-sign-in" width="760"></p>
 
-<img src="docs/architecture/flows/2-write.png" alt="Flow 2-write" width="760">
+<p align="center"><img src="docs/architecture/flows/2-write.png" alt="Flow 2-write" width="760"></p>
 
-<img src="docs/architecture/flows/3-index.png" alt="Flow 3-index" width="760">
+<p align="center"><img src="docs/architecture/flows/3-index.png" alt="Flow 3-index" width="760"></p>
 
-<img src="docs/architecture/flows/4-read.png" alt="Flow 4-read" width="760">
+<p align="center"><img src="docs/architecture/flows/4-read.png" alt="Flow 4-read" width="760"></p>
 
-<img src="docs/architecture/flows/5-search.png" alt="Flow 5-search" width="760">
+<p align="center"><img src="docs/architecture/flows/5-search.png" alt="Flow 5-search" width="760"></p>
 
-<img src="docs/architecture/flows/6-reconcile.png" alt="Flow 6-reconcile" width="760">
+<p align="center"><img src="docs/architecture/flows/6-reconcile.png" alt="Flow 6-reconcile" width="760"></p>
 
-<img src="docs/architecture/flows/7-failure.png" alt="Flow 7-failure" width="760">
+<p align="center"><img src="docs/architecture/flows/7-failure.png" alt="Flow 7-failure" width="760"></p>
 
 ## Links
 
