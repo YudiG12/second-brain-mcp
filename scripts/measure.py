@@ -43,6 +43,8 @@ def stats(xs, digits=2):
 
 
 writes, visible, visible_kw, searches_kw, searches_sem = [], [], [], [], []
+reads, edits, local_reads, local_writes = [], [], [], []
+failures = []  # calls that errored or timed out (60 s); a run with one keeps going  # ADR 014: what the Mac pays now vs a local file
 note_count = len(call("list_notes", {})[1].splitlines())
 for i in range(RUNS):
     tag = uuid.uuid4().hex[:12]
@@ -50,23 +52,34 @@ for i in range(RUNS):
     path = f"_bench/{tag}.md"
     text = f"Benchmark note {word}. Measuring how long the second brain takes to make a new note searchable."
     try:
-        t, _ = call("write_note", {"path": path, "content": text})  # cold or warm is not controlled
-        writes.append(t)
-        start = time.monotonic()
-        sem_at = kw_at = None
-        while time.monotonic() - start < POLL_MAX and (sem_at is None or kw_at is None):
-            if kw_at is None and path in call("search_notes", {"query": word})[1]:
-                kw_at = time.monotonic() - start + t
-            if sem_at is None and path in call("semantic_search", {"query": text, "topK": 10})[1]:
-                sem_at = time.monotonic() - start + t
-            if sem_at is None or kw_at is None:
-                time.sleep(POLL_EVERY)
-        visible.append(sem_at)
-        visible_kw.append(kw_at)
-        # warm: these run right after the polling loop
-        searches_kw.append(call("search_notes", {"query": "projeto"})[0])
-        searches_sem.append(call("semantic_search", {"query": "decisões de carreira", "topK": 5})[0])
-        print(f"run {i + 1}/{RUNS}: write {t:.2f}s, keyword after {kw_at}s, semantic after {sem_at}s", file=sys.stderr)
+      try:
+          t, _ = call("write_note", {"path": path, "content": text})  # cold or warm is not controlled
+          writes.append(t)
+          start = time.monotonic()
+          sem_at = kw_at = None
+          while time.monotonic() - start < POLL_MAX and (sem_at is None or kw_at is None):
+              if kw_at is None and path in call("search_notes", {"query": word})[1]:
+                  kw_at = time.monotonic() - start + t
+              if sem_at is None and path in call("semantic_search", {"query": text, "topK": 10})[1]:
+                  sem_at = time.monotonic() - start + t
+              if sem_at is None or kw_at is None:
+                  time.sleep(POLL_EVERY)
+          visible.append(sem_at)
+          visible_kw.append(kw_at)
+          # warm: these run right after the polling loop
+          searches_kw.append(call("search_notes", {"query": "projeto"})[0])
+          searches_sem.append(call("semantic_search", {"query": "decisões de carreira", "topK": 5})[0])
+          reads.append(call("read_note", {"path": path})[0])
+          edits.append(call("edit_note", {"path": path, "old_text": "Benchmark note", "new_text": "Benchmark note (edited)"})[0])
+          # the same read and write on a local file, as the Mac did with its clone before ADR 014
+          local = os.path.join("/tmp", f"bench-{tag}.md")
+          t0 = time.perf_counter(); open(local, "w").write(text); local_writes.append(time.perf_counter() - t0)
+          t0 = time.perf_counter(); open(local).read(); local_reads.append(time.perf_counter() - t0)
+          os.remove(local)
+          print(f"run {i + 1}/{RUNS}: write {t:.2f}s, keyword after {kw_at}s, semantic after {sem_at}s", file=sys.stderr)
+      except Exception as e:
+        failures.append({"run": i + 1, "error": str(e)[:200]})
+        print(f"run {i + 1}/{RUNS}: failed: {str(e)[:200]}", file=sys.stderr)
     finally:
         # delete every run's note before the next one, so runs don't compete in search and the note count stays fixed
         try:
@@ -82,6 +95,11 @@ print(json.dumps({
     "write_note": stats(writes),
     "write_to_searchable": {**stats(ok, 0), "never_visible": visible.count(None), "resolution_s": "about ±4.5 (3 s sleep + one query per poll)", "gave_up_after_s": POLL_MAX} if ok else {"never_visible": RUNS},
     "write_to_keyword_searchable": {**stats([v for v in visible_kw if v is not None], 1), "never_visible": visible_kw.count(None)} if any(v is not None for v in visible_kw) else {"never_visible": RUNS},
+    "read_note": stats(reads),
+    "edit_note": stats(edits),
+    "local_file_read_ms": stats([x * 1000 for x in local_reads], 3),
+    "local_file_write_ms": stats([x * 1000 for x in local_writes], 3),
+    "failures": failures,
     "search_notes": stats(searches_kw),
     "semantic_search": stats(searches_sem),
 }, indent=2))

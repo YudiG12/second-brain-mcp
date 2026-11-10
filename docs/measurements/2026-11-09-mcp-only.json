@@ -1,0 +1,174 @@
+{
+  "server": "https://second-brain-mcp.yudiganeko.workers.dev",
+  "date": "2026-11-10T00:46:31Z",
+  "runs": 10,
+  "note": "Seconds, measured from the Mac, including network. Nearest-rank percentiles, indicative at n=10. Searches are warm. After ADR 013 (version check) and ADR 014 (no local clone): read_note and edit_note are what the Mac pays now; local_file_* is the same read/write on a local file, as with the old clone. Each call is a fresh curl (new TLS connection), so MCP clients that keep a connection open pay less.",
+  "notes_in_repo": 33,
+  "write_note": {
+    "n": 10,
+    "p50": 2.11,
+    "p90": 2.2,
+    "max": 2.34,
+    "samples": [
+      2.34,
+      2.19,
+      2.12,
+      2.09,
+      2.1,
+      2.11,
+      2.1,
+      2.2,
+      2.13,
+      2.07
+    ]
+  },
+  "write_to_searchable": {
+    "n": 10,
+    "p50": 67.0,
+    "p90": 99.0,
+    "max": 103.0,
+    "samples": [
+      59.0,
+      40.0,
+      54.0,
+      99.0,
+      67.0,
+      99.0,
+      96.0,
+      103.0,
+      49.0,
+      86.0
+    ],
+    "never_visible": 0,
+    "resolution_s": "about \u00b14.5 (3 s sleep + one query per poll)",
+    "gave_up_after_s": 600.0
+  },
+  "write_to_keyword_searchable": {
+    "n": 10,
+    "p50": 15.6,
+    "p90": 16.3,
+    "max": 17.0,
+    "samples": [
+      16.3,
+      15.7,
+      15.5,
+      15.5,
+      15.3,
+      15.5,
+      17.0,
+      15.6,
+      15.7,
+      15.6
+    ],
+    "never_visible": 0
+  },
+  "read_note": {
+    "n": 10,
+    "p50": 1.55,
+    "p90": 1.73,
+    "max": 2.12,
+    "samples": [
+      1.57,
+      1.52,
+      1.56,
+      2.12,
+      1.55,
+      1.54,
+      1.61,
+      1.73,
+      1.5,
+      1.52
+    ]
+  },
+  "edit_note": {
+    "n": 10,
+    "p50": 2.42,
+    "p90": 4.31,
+    "max": 4.46,
+    "samples": [
+      2.34,
+      2.33,
+      2.29,
+      4.25,
+      2.42,
+      4.46,
+      4.21,
+      4.11,
+      2.34,
+      4.31
+    ]
+  },
+  "local_file_read_ms": {
+    "n": 10,
+    "p50": 0.125,
+    "p90": 0.275,
+    "max": 0.553,
+    "samples": [
+      0.553,
+      0.125,
+      0.09,
+      0.13,
+      0.162,
+      0.097,
+      0.107,
+      0.04,
+      0.254,
+      0.275
+    ]
+  },
+  "local_file_write_ms": {
+    "n": 10,
+    "p50": 0.504,
+    "p90": 0.929,
+    "max": 2.13,
+    "samples": [
+      0.929,
+      0.44,
+      0.504,
+      0.842,
+      2.13,
+      0.565,
+      0.504,
+      0.428,
+      0.494,
+      0.491
+    ]
+  },
+  "failures": [],
+  "search_notes": {
+    "n": 10,
+    "p50": 1.44,
+    "p90": 1.49,
+    "max": 1.71,
+    "samples": [
+      1.43,
+      1.71,
+      1.43,
+      1.44,
+      1.44,
+      1.46,
+      1.42,
+      1.45,
+      1.42,
+      1.49
+    ]
+  },
+  "semantic_search": {
+    "n": 10,
+    "p50": 1.41,
+    "p90": 1.49,
+    "max": 1.49,
+    "samples": [
+      1.43,
+      1.41,
+      1.47,
+      1.49,
+      1.49,
+      1.42,
+      1.4,
+      1.41,
+      1.4,
+      1.38
+    ]
+  }
+}
