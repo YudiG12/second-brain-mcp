@@ -4,7 +4,7 @@ The low-level design: every component, how it works and the decision behind it. 
 
 ![Architecture of v2](docs/architecture/v2.png)
 
-One map per flow: [sign-in](docs/architecture/flows/1-sign-in.png) · [write](docs/architecture/flows/2-write.png) · [read](docs/architecture/flows/3-read.png) · [index](docs/architecture/flows/4-index.png) · [failure and DLQ](docs/architecture/flows/5-failure.png) · [search](docs/architecture/flows/6-search.png).
+One map per flow: [sign-in](docs/architecture/flows/1-sign-in.png) · [write](docs/architecture/flows/2-write.png) · [read](docs/architecture/flows/3-read.png) · [index](docs/architecture/flows/4-index.png) · [reconciliation](docs/architecture/flows/5-reconcile.png) · [failure and DLQ](docs/architecture/flows/6-failure.png) · [search](docs/architecture/flows/7-search.png).
 
 | Concern | How | Decision |
 |---|---|---|
