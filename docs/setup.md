@@ -1,8 +1,6 @@
 # Setup
 
-`npm run deploy-your-own` runs every step below, in order. This page is the manual path and the reference for what the script does.
-
-How to recreate the infrastructure from this repo ([ADR 006](adr/006-wrangler-and-a-setup-script-instead-of-terraform.md)).
+`npm run deploy-your-own` runs every step below, in order.
 
 Everything that changes per deployment is in `wrangler.jsonc`: `name`, `account_id`, `vars` (`PUBLIC_URL`, `CF_ACCOUNT_ID`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID`), and the D1 and KV ids, which `scripts/setup.sh` writes itself. The scripts read it through `scripts/config.mjs`; `node scripts/config.mjs check` validates it.
 

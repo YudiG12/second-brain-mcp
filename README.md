@@ -6,8 +6,6 @@
 
 <p align="center"><img src="docs/assets/hld-light.png" alt="High-level design: Claude Code and any other client talk MCP to a Worker on Cloudflare, which keeps the notes in Artifacts and embeds them with Workers AI into Vectorize" width="720"></p>
 
-<p align="center"><sub>A simplified view. Every component, with the decision behind it: <a href="ARCHITECTURE.md">ARCHITECTURE.md</a>.</sub></p>
-
 ## Deploy your own
 
 Needs a Cloudflare account on the [Workers Paid](https://developers.cloudflare.com/workers/platform/pricing/) plan, Node 24 and git. No Homebrew or sudo (a second user on a Mac, say)? Install Node with [nvm](https://github.com/nvm-sh/nvm), [fnm](https://github.com/Schniz/fnm) or the [nodejs.org tarball](https://nodejs.org/en/download) in your home folder, and keep it on the `PATH` for `npx wrangler login` too.
@@ -55,8 +53,8 @@ In the plan note, change the deadline to Friday.
 
 ## Links
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): the low-level design, every component with the decision behind it
+- [Architecture](ARCHITECTURE.md)
 - [Decisions (ADRs)](docs/adr/) · [Spec v2](docs/spec/v2.md) · [PRD v2](docs/prd/v2.md)
-- [Performance](docs/measurements/README.md): v1 vs v2, measured in production
-- [At scale](docs/design/at-scale.md): what changes for a team
+- [Performance](docs/measurements/README.md)
+- [At scale](docs/design/at-scale.md)
 - [CHANGELOG](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT license](LICENSE)

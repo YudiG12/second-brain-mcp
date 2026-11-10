@@ -1,7 +1,5 @@
 # AGENTS.md
 
-Instructions for AI coding agents working in this repository.
-
 ## Deploying it for someone
 
 The person wants their own Second Brain MCP on their Cloudflare account. Run the installer; it is safe to re-run and skips finished steps.
