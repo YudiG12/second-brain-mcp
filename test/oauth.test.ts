@@ -40,7 +40,7 @@ describe("OAuth discovery (ADR 011)", () => {
     const res = await fetchWorker("/mcp", { method: "POST" });
     expect(res.status).toBe(401);
     expect(res.headers.get("WWW-Authenticate")).toContain("resource_metadata");
-  });
+  }, 20_000); // first request of the file boots workerd; on a slow CI runner that alone can pass 5 s
 
   it("publishes the protected-resource and authorization-server metadata", async () => {
     const pr = (await (await fetchWorker("/.well-known/oauth-protected-resource/mcp")).json()) as any;
