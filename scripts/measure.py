@@ -7,7 +7,7 @@ authorization flow); it is sent as a Bearer header through curl's stdin, never o
 Writes notes under _bench/ and deletes them at the end. Prints a JSON summary.
 DNS goes through Cloudflare's DNS-over-HTTPS, so a stale local resolver doesn't matter.
 """
-import json, math, os, statistics, subprocess, sys, time, uuid
+import json, math, os, re, statistics, subprocess, sys, time, uuid
 
 URL = os.environ.get("SECOND_BRAIN_URL") or subprocess.run(["node", "scripts/config.mjs", "PUBLIC_URL"], check=True, capture_output=True, text=True, cwd=os.path.join(os.path.dirname(__file__), "..")).stdout.strip()
 RUNS = int(sys.argv[1]) if len(sys.argv) > 1 else 10
@@ -42,7 +42,7 @@ def stats(xs, digits=2):
     return {"n": len(s), "p50": pct(0.5), "p90": pct(0.9), "max": round(s[-1], digits), "samples": [round(x, digits) for x in xs]}
 
 
-writes, visible, visible_kw, searches_kw, searches_sem = [], [], [], [], []
+writes, visible, visible_kw, searches_kw, searches_sem = [], [], [], [], []  # both are search_notes: a keyword-ish and a meaning-ish query
 reads, edits, local_reads, local_writes = [], [], [], []
 failures = []  # calls that errored or timed out (60 s); a run with one keeps going  # ADR 014: what the Mac pays now vs a local file
 note_count = len(call("list_notes", {})[1].splitlines())
@@ -60,7 +60,7 @@ for i in range(RUNS):
           while time.monotonic() - start < POLL_MAX and (sem_at is None or kw_at is None):
               if kw_at is None and path in call("search_notes", {"query": word})[1]:
                   kw_at = time.monotonic() - start + t
-              if sem_at is None and path in call("semantic_search", {"query": text, "topK": 10})[1]:
+              if sem_at is None and re.search(re.escape(path) + r" \((semantic|both)\)", call("search_notes", {"query": text})[1]):
                   sem_at = time.monotonic() - start + t
               if sem_at is None or kw_at is None:
                   time.sleep(POLL_EVERY)
@@ -68,7 +68,7 @@ for i in range(RUNS):
           visible_kw.append(kw_at)
           # warm: these run right after the polling loop
           searches_kw.append(call("search_notes", {"query": "projeto"})[0])
-          searches_sem.append(call("semantic_search", {"query": "decisões de carreira", "topK": 5})[0])
+          searches_sem.append(call("search_notes", {"query": "decisões de carreira"})[0])
           reads.append(call("read_note", {"path": path})[0])
           edits.append(call("edit_note", {"path": path, "old_text": "Benchmark note", "new_text": "Benchmark note (edited)"})[0])
           # the same read and write on a local file, as the Mac did with its clone before ADR 014
@@ -100,6 +100,6 @@ print(json.dumps({
     "local_file_read_ms": stats([x * 1000 for x in local_reads], 3),
     "local_file_write_ms": stats([x * 1000 for x in local_writes], 3),
     "failures": failures,
-    "search_notes": stats(searches_kw),
-    "semantic_search": stats(searches_sem),
+    "search_notes (keyword query)": stats(searches_kw),
+    "search_notes (meaning query)": stats(searches_sem),
 }, indent=2))

@@ -170,17 +170,6 @@ function createServer() {
   );
 
   server.registerTool(
-    "semantic_search",
-    { description: "Semantic search across notes (embeddings + Vectorize). Good for questions like 'what did I decide about X'.", inputSchema: { query: z.string(), topK: z.number().int().min(1).max(10).optional() } },
-    async ({ query, topK }) => {
-      const [q] = await embedder().embed([query]);
-      const res = await E.VECTORS.query(q, { topK: topK ?? 5, returnMetadata: "all" });
-      const out = res.matches.map((m) => `[${m.score.toFixed(2)}] ${m.metadata?.path} (#${m.metadata?.seq})\n${m.metadata?.text}`);
-      return text(out.join("\n\n---\n\n") || "Nothing found.");
-    },
-  );
-
-  server.registerTool(
     "save_idea",
     { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {

@@ -10,6 +10,7 @@
 - `npm run mirror`: an optional read-only copy of the notes in a folder, for viewing (Obsidian's graph view). It fetches and resets; it never edits or pushes.
 
 ### Removed
+- **`semantic_search`**: `search_notes` already runs the same semantic search, with a similarity floor, and fuses it with keywords. One search tool, so an agent never has to pick ([ADR 015](docs/adr/015-one-search-tool.md)).
 - The Claude Code sync hook (`clients/claude-code/`, `npm run mac-hook`, `scripts/merge-hooks.mjs`) and its shell tests. The `/hook/artifacts-token` route and `HOOK_SECRET` stay, for the mirror.
 
 ## v2 (2026-11-06)
