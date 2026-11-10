@@ -42,7 +42,7 @@ def stats(xs, digits=2):
     return {"n": len(s), "p50": pct(0.5), "p90": pct(0.9), "max": round(s[-1], digits), "samples": [round(x, digits) for x in xs]}
 
 
-writes, visible, visible_kw, searches_kw, searches_sem = [], [], [], [], []  # both are search_notes: a keyword-ish and a meaning-ish query
+writes, visible, visible_kw, searches_kw, searches_sem = [], [], [], [], []
 reads, edits, local_reads, local_writes = [], [], [], []
 failures = []  # calls that errored or timed out (60 s); a run with one keeps going  # ADR 014: what the Mac pays now vs a local file
 note_count = len(call("list_notes", {})[1].splitlines())
@@ -60,7 +60,7 @@ for i in range(RUNS):
           while time.monotonic() - start < POLL_MAX and (sem_at is None or kw_at is None):
               if kw_at is None and path in call("search_notes", {"query": word})[1]:
                   kw_at = time.monotonic() - start + t
-              if sem_at is None and re.search(re.escape(path) + r" \((semantic|both)\)", call("search_notes", {"query": text})[1]):
+              if sem_at is None and re.search(re.escape(path) + r" \((semantic|both)\)", call("search_notes", {"query": text, "limit": 20})[1]):
                   sem_at = time.monotonic() - start + t
               if sem_at is None or kw_at is None:
                   time.sleep(POLL_EVERY)
