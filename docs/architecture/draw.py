@@ -19,42 +19,72 @@ LUCIDE = {
     "sparkles": '<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
     "terminal": '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
     "chat": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+    "laptop": '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+    "smartphone": '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+    "monitor": '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
 }
 
-def glyph(name, x, y, size=26):
+def glyph(name, x, y, size=26, color="#fff"):
     """A white icon at (x, y): a brand mark (filled) or a Lucide icon (stroked)."""
     k = size / 24
     if name in BRANDS:
-        return f'<path transform="translate({x},{y}) scale({k})" d="{BRANDS[name]}" fill="#fff"/>'
-    return f'<g transform="translate({x},{y}) scale({k})" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[name]}</g>'
+        return f'<path transform="translate({x},{y}) scale({k})" d="{BRANDS[name]}" fill="{color}"/>'
+    return f'<g transform="translate({x},{y}) scale({k})" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[name]}</g>'
 
 C = dict(indigo="#5B5BD6", purple="#8E6FCB", teal="#3FA796", green="#2F8A5B", red="#D1495B", orange="#E08A3C", slate="#4A5866")
+DARK = dict(indigo="#3B3BA8", purple="#5E4396", teal="#22705F", green="#1F5E3D", red="#9C2C3B", orange="#9A5512", slate="#2E3944")
 NAVY, MUTED, BG, LINE = "#1B2632", "#4A5D72", "#FCFAF7", "#677A8E"
 W, H = 220, 64
 
-def box(x, y, title, sub, color, caption=None, w=W, icons=()):
-    t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}"/>'
+def box(x, y, title, sub, color, caption=None, w=W, icons=(), kind="service"):
+    """kind: service = managed resource (solid); part = a class inside the Worker (outlined); api = no resource, only called (dashed)."""
+    ink = "#fff" if kind == "service" else (DARK[color] if kind == "part" else C[color])
+    if kind == "service":
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}"/>'
+    elif kind == "part":
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="{C[color]}" fill-opacity="0.2"/>'
+    else:
+        t = f'<rect x="{x}" y="{y}" width="{w}" height="{H}" rx="6" fill="#fff" stroke="{C[color]}" stroke-width="2" stroke-dasharray="5 4"/>'
     # icons on the left; text centred in the space that's left
     for i, name in enumerate(icons):
-        t += glyph(name, x + 14 + i * 32, y + 19)
+        t += glyph(name, x + 14 + i * 32, y + 19, color=ink)
     left = x + (14 + 32 * len(icons) if icons else 0)
     cx = left + (x + w - left) / 2
-    t += f'<text x="{cx}" y="{y + 27}" text-anchor="middle" class="t">{html.escape(title)}</text>'
-    t += f'<text x="{cx}" y="{y + 47}" text-anchor="middle" class="s">{html.escape(sub)}</text>'
+    t += f'<text x="{cx}" y="{y + 27}" text-anchor="middle" class="t" style="fill:{ink}">{html.escape(title)}</text>'
+    t += f'<text x="{cx}" y="{y + 47}" text-anchor="middle" class="s" style="fill:{ink}">{html.escape(sub)}</text>'
     if caption:
         t += f'<text x="{x + w/2}" y="{y + H + 18}" text-anchor="middle" class="c">{html.escape(caption)}</text>'
     return t
 
-def arrow(points, label=None, at=0.5, both=False):
+def devices(cx, y, names, label):
+    """A caption with small device icons before it, centred under a box."""
+    tw = 6.6 * len(label); iw = 20 * len(names); x = cx - (iw + 6 + tw) / 2
+    t = "".join(f'<g transform="translate({x + i*20},{y - 13}) scale(0.67)" fill="none" stroke="{MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{LUCIDE[n]}</g>' for i, n in enumerate(names))
+    return t + f'<text x="{x + iw + 6}" y="{y}" class="c">{html.escape(label)}</text>'
+
+FLOW = dict(auth=LINE, write="#5B5BD6", index="#E08A3C", read="#2F8A5B")
+FLOW_MARKERS = "".join(f'<marker id="m-{k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{v}"/></marker>' for k, v in FLOW.items())
+
+def legend(x, y, items):
+    """Flow names: a short coloured line and its name, in a row."""
+    t = ""
+    for k, name in items:
+        t += f'<path d="M{x},{y} L{x+28},{y}" class="a" style="stroke:{FLOW[k]};stroke-width:2.2"/><text x="{x+36}" y="{y+4}" class="lg">{html.escape(name)}</text>'
+        x += 50 + 7.4 * len(name)
+    return t
+
+def arrow(points, label=None, at=0.5, both=False, flow=None, dy=0):
     d = "M" + " L".join(f"{x},{y}" for x, y in points)
-    t = f'<path d="{d}" class="a" marker-end="url(#m)"{" marker-start=\"url(#ms)\"" if both else ""}/>'
+    style = f' style="stroke:{FLOW[flow]};stroke-width:2.2"' if flow else ""
+    end = f"m-{flow}" if flow else "m"
+    t = f'<path d="{d}" class="a"{style} marker-end="url(#{end})"{" marker-start=\"url(#ms)\"" if both else ""}/>'
     if label:
         # label on the longest segment
         segs = list(zip(points, points[1:]))
         (x1, y1), (x2, y2) = max(segs, key=lambda s: abs(s[1][0]-s[0][0]) + abs(s[1][1]-s[0][1]))
-        lx, ly = x1 + (x2 - x1) * at, y1 + (y2 - y1) * at
+        lx, ly = x1 + (x2 - x1) * at, y1 + (y2 - y1) * at + dy  # dy: lift the pill off a short arrow
         w = 7.2 * len(label) + 16
-        t += f'<rect x="{lx - w/2}" y="{ly - 11}" width="{w}" height="22" rx="11" fill="{NAVY}"/>'
+        t += f'<rect x="{lx - w/2}" y="{ly - 11}" width="{w}" height="22" rx="11" fill="{FLOW[flow] if flow else NAVY}"/>'
         t += f'<text x="{lx}" y="{ly + 4}" text-anchor="middle" class="p">{html.escape(label)}</text>'
     return t
 
@@ -62,10 +92,11 @@ def svg(width, height, title, subtitle, body):
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" font-family="Onest, Inter, system-ui, sans-serif">
 <defs>
 <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>
+{FLOW_MARKERS}
 <marker id="ms" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>
 <style>.t{{fill:#fff;font-size:15px;font-weight:700}}.s{{fill:#fff;font-size:12px;opacity:.92}}.c{{fill:{MUTED};font-size:12px}}
 .a{{fill:none;stroke:{LINE};stroke-width:1.6;stroke-dasharray:6 5}}.p{{fill:#fff;font-size:11.5px;font-weight:600}}
-.h{{fill:{NAVY};font-size:22px;font-weight:800}}.hs{{fill:{MUTED};font-size:13px}}.g{{fill:none;stroke:#E6D5C1;stroke-width:1.5;stroke-dasharray:2 4}}.gl{{fill:#8C6A43;font-size:12px;font-weight:600}}</style>
+.h{{fill:{NAVY};font-size:22px;font-weight:800}}.hs{{fill:{MUTED};font-size:13px}}.g{{fill:none;stroke:#E6D5C1;stroke-width:1.5;stroke-dasharray:2 4}}.gl{{fill:#8C6A43;font-size:12px;font-weight:600}}.lg{{fill:{NAVY};font-size:13px;font-weight:600}}.ft{{font-size:12px;font-weight:700;letter-spacing:.06em}}</style>
 </defs>
 <rect width="100%" height="100%" fill="{BG}"/>
 <text x="32" y="44" class="h">{html.escape(title)}</text><text x="32" y="66" class="hs">{html.escape(subtitle)}</text>
@@ -92,38 +123,58 @@ open(os.path.join(os.path.dirname(__file__), "v1.svg"), "w").write(svg(1120, 650
 
 # ---------- v2 ----------
 # Columns: outside (A) | Worker & runners (B) | storage & queue (C) | indexes & AI (D)
-A, B, Cx, D = 40, 420, 800, 1180
+A, X1, X2, X3 = 40, 440, 800, 1160
+# Read it like text, left to right, row by row:
+#   row 1, the write: Worker -> RepoWriter -> Artifacts
+#   row 2, indexing in the background: Workflow (daily repair) -> Queue
+#   row 3, the indexes: D1, Workers AI (embeddings), Vectorize
 v2 = []
-v2.append('<rect x="390" y="92" width="1040" height="640" rx="10" class="g"/>' + f'<path transform="translate(404,98) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="428" y="112" class="gl">CLOUDFLARE</text>')
-v2.append(box(A, 110, "GitHub", "sign-in only", "slate", "owner's account, no scopes", icons=("github",)))
-v2.append(box(A, 226, "Claude · ChatGPT", "MCP clients", "slate", "web and phone", icons=("claude", "chat")))
-v2.append(box(A, 330, "Claude Code", "MCP client", "slate", "on the Mac · MCP only", icons=("terminal",)))
-v2.append(box(B, 226, "Worker", "OAuth · MCP tools · admin", "indigo", icons=("workers",)))
-v2.append(box(B, 420, "RepoWriter", "Durable Object · 1 per repo", "purple", "in-memory mutex, retries", icons=("lock",)))
-v2.append(box(B, 600, "Workflow", "reconcile · daily", "orange", "snapshots notes + manifest", icons=("workflow",)))
-v2.append(box(Cx, 120, "KV", "OAuth grants", "slate", "hashed tokens", icons=("key",)))
-v2.append(box(Cx, 420, "Artifacts", "repo notes · Git", "green", "source of truth", icons=("branch",)))
-v2.append(box(Cx, 600, "Queue", "index-jobs + DLQ", "orange", "the only index writer", icons=("queue",)))
-v2.append(box(D, 226, "Vectorize", "semantic index", "teal", w=210, icons=("search",)))
-v2.append(box(D, 420, "D1", "manifest · FTS5 · alerts", "red", w=210, icons=("database",)))
-v2.append(box(D, 600, "Workers AI", "bge-m3", "teal", w=210, icons=("sparkles",)))
-# into the Worker
-v2.append(arrow([(260, 258), (420, 258)], "OAuth"))
-v2.append(arrow([(260, 362), (330, 362), (330, 276), (420, 276)]))
-v2.append(arrow([(260, 142), (370, 142), (370, 244), (420, 244)], "sign in", at=0.45))
-# from the Worker
-v2.append(arrow([(600, 226), (600, 152), (800, 152)], "grants", at=0.5))
-v2.append(arrow([(640, 258), (1165, 258), (1165, 436), (1180, 436)]))
-v2.append(arrow([(640, 258), (1180, 258)], "search", at=0.62))
-v2.append(arrow([(640, 272), (720, 272), (720, 436), (800, 436)], "read", at=0.6))
-v2.append(arrow([(640, 284), (660, 284), (660, 614), (800, 614)], "enqueue", at=0.15))
-v2.append(arrow([(530, 290), (530, 420)], "operations"))
-# writes, events, indexing
-v2.append(arrow([(640, 452), (800, 452)], "git push"))
-v2.append(arrow([(990, 484), (990, 600)], "pushed event"))
-v2.append(arrow([(640, 632), (800, 632)], "fixes"))
-v2.append(arrow([(1020, 632), (1180, 632)], "embed"))
-v2.append(arrow([(1020, 614), (1110, 614), (1110, 452), (1180, 452)], "record", at=0.5))
-v2.append(arrow([(1020, 604), (1140, 604), (1140, 270), (1180, 270)], "upsert", at=0.75))
-open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 770, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
+v2.append('<rect x="376" y="80" width="1044" height="640" rx="10" class="g"/>' + f'<path transform="translate(390,86) scale(0.75)" d="{BRANDS["cloudflare"]}" fill="#F38020"/>' + '<text x="414" y="100" class="gl">CLOUDFLARE</text>')
+# GitHub is only the identity provider: its own group, apart from the MCP clients
+v2.append('<rect x="24" y="92" width="252" height="128" rx="10" class="g"/><text x="38" y="112" class="gl">SIGN-IN PROVIDER</text>')
+v2.append(box(A, 124, "GitHub", "identity only", "slate", "owner's account, no scopes", icons=("github",)))
+v2.append('<rect x="24" y="236" width="252" height="236" rx="10" class="g"/><text x="38" y="256" class="gl">MCP CLIENTS</text>')
+v2.append(box(A, 260, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 342, ("monitor", "smartphone"), "Mac (web) and phone"))
+v2.append(box(A, 376, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 458, ("laptop",), "on the MacBook"))
+v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
+# The Worker is one deployable: an area holding its four parts, all the same style.
+# Outside it, managed services; Workers AI is only called (dashed).
+v2.append('<rect x="410" y="232" width="626" height="272" rx="8" fill="#5B5BD6" fill-opacity="0.06" stroke="#5B5BD6" stroke-width="1.5" stroke-dasharray="6 4"/>'
+          '<text x="424" y="496" class="gl" style="fill:#5B5BD6">WORKER</text>')
+# row 1: the write
+v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",), kind="part"))
+v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "indigo", icons=("lock",), kind="part"))
+v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
+# row 2: indexing
+v2.append(box(X1, 410, "Reconcile", "Workflow · runs daily", "indigo", icons=("workflow",), kind="part"))
+v2.append(box(X2, 410, "Queue consumer", "the only index writer", "indigo", icons=("workers",), kind="part"))
+v2.append(box(X3, 410, "Queue", "index-jobs + DLQ", "orange", icons=("queue",)))
+# row 3: the indexes, and the model the consumer calls
+v2.append(box(X1, 600, "D1", "manifest · keyword index", "red", icons=("database",)))
+v2.append(box(X2, 600, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"))
+v2.append(box(X3, 600, "Vectorize", "semantic index", "teal", icons=("search",)))
+# sign-in and MCP calls
+v2.append(arrow([(260, 156), (340, 156), (340, 258), (440, 258)], flow="auth"))
+v2.append(arrow([(260, 292), (440, 292)], "MCP + OAuth", at=0.36, flow="auth"))
+v2.append(arrow([(260, 408), (340, 408), (340, 306), (440, 306)], flow="auth"))
+v2.append(arrow([(550, 250), (550, 174)], flow="auth"))
+# write the note
+v2.append(arrow([(660, 282), (800, 282)], flow="write"))
+v2.append(arrow([(660, 282), (800, 282)], "write the note", flow="write", dy=-22))
+v2.append(arrow([(1020, 282), (1160, 282)], flow="write"))
+# into the Queue: enqueue after a write, the push event, and the daily repair
+v2.append(arrow([(620, 314), (620, 364), (1240, 364), (1240, 410)], flow="index"))
+v2.append(arrow([(1300, 314), (1300, 410)], "index in the background", at=0.25, flow="index"))
+v2.append(arrow([(550, 410), (550, 388), (1200, 388), (1200, 410)], "reconciliation", at=0.2, flow="index"))
+# the consumer takes jobs, asks for embeddings, writes both indexes
+v2.append(arrow([(1160, 442), (1020, 442)], flow="index"))
+v2.append(arrow([(840, 474), (840, 548), (550, 548), (550, 600)], flow="index"))
+v2.append(arrow([(910, 474), (910, 600)], "embed", at=0.7, flow="index"))
+v2.append(arrow([(980, 474), (980, 548), (1270, 548), (1270, 600)], "write embeddings", at=0.5, flow="index"))
+# read and search
+v2.append(arrow([(620, 250), (620, 214), (1240, 214), (1240, 250)], "read a note", at=0.5, flow="read"))
+v2.append(arrow([(440, 274), (394, 274), (394, 632), (440, 632)], flow="read"))
+v2.append(arrow([(394, 632), (394, 690), (1270, 690), (1270, 664)], "search", flow="read"))
+
+open(os.path.join(os.path.dirname(__file__), "v2.svg"), "w").write(svg(1460, 750, "Second Brain MCP · v2", "Notes in Cloudflare Artifacts, one writer per repository, one index writer, OAuth with GitHub sign-in.", "".join(v2)))
 print("ok")
