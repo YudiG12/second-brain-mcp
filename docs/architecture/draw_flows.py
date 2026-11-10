@@ -49,10 +49,10 @@ save("3-read", 1140, 340, "Flow 3 · Read a note", "Straight from Git; the reply
 ])
 
 # 4. index
-save("4-index", 1640, 500, "Flow 4 · Index in the background", "Three producers, one consumer: the only writer of the keyword and semantic indexes.", [
+save("5-index", 1640, 500, "Flow 5 · Index in the background", "Three producers, one consumer: the only writer of the keyword and semantic indexes.", [
     endpoint(40, 80, "after each write"),
     box(40, 200, "Artifacts", "push event", "green", icons=("branch",)),
-    box(40, 320, "Reconcile", "Workflow · daily", "indigo", "daily repair · see flow 5", icons=("workflow",), kind="part"),
+    box(40, 320, "Reconcile", "Workflow · daily", "indigo", "daily repair · see flow 6", icons=("workflow",), kind="part"),
     box(460, 200, "Queue", "index-jobs · path only", "orange", icons=("queue",)),
     box(880, 200, "Queue consumer", "Worker · queue()", "indigo", "same sha → skip · head moved → requeue", icons=("workers",), kind="part"),
     box(1380, 60, "D1", "manifest · FTS5 chunks", "red", icons=("database",)),
@@ -68,7 +68,7 @@ save("4-index", 1640, 500, "Flow 4 · Index in the background", "Three producers
 ])
 
 # 5. reconcile
-save("5-reconcile", 1560, 480, "Flow 5 · Reconciliation", "A daily Workflow compares the notes with the index and enqueues only what differs; the consumer does the rest.", [
+save("6-reconcile", 1560, 480, "Flow 6 · Reconciliation", "A daily Workflow compares the notes with the index and enqueues only what differs; the consumer does the rest.", [
     box(40, 200, "Cron", "0 4 * * * · /admin/reconcile", "slate", icons=("workflow",)),
     box(460, 200, "Reconcile", "Workflow · durable steps", "indigo", icons=("workflow",), kind="part"),
     box(880, 80, "Artifacts", "Git · source of truth", "green", icons=("branch",)),
@@ -81,7 +81,7 @@ save("5-reconcile", 1560, 480, "Flow 5 · Reconciliation", "A daily Workflow com
 ])
 
 # 6. failure
-save("6-failure", 1560, 420, "Flow 6 · A job that keeps failing", "Retries with backoff, then the dead-letter queue; the daily reconciliation tries again.", [
+save("7-failure", 1560, 420, "Flow 7 · A job that keeps failing", "Retries with backoff, then the dead-letter queue; the daily reconciliation tries again.", [
     box(40, 100, "Queue", "retry 10·20·40·80·160 s", "orange", icons=("queue",)),
     box(460, 100, "Queue consumer", "Worker · queue()", "indigo", icons=("workers",), kind="part"),
     box(880, 100, "DLQ", "index-jobs-dlq", "red", icons=("queue",)),
@@ -97,7 +97,7 @@ save("6-failure", 1560, 420, "Flow 6 · A job that keeps failing", "Retries with
 ])
 
 # 7. search
-save("7-search", 1560, 380, "Flow 7 · Search", "Keyword and meaning in parallel, fused by reciprocal rank: 1 / (60 + rank).", [
+save("4-search", 1560, 380, "Flow 4 · Search", "Keyword and meaning in parallel, fused by reciprocal rank: 1 / (60 + rank).", [
     client(40, 200), endpoint(460, 200, "RRF fuse · best chunk per note"),
     box(880, 80, "D1", "FTS5 · BM25", "red", icons=("database",)),
     box(880, 200, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"),
