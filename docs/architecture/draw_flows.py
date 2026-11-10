@@ -17,12 +17,12 @@ save("1-sign-in", 1160, 460, "Flow 1 · Sign-in", "OAuth 2.1 with GitHub as the 
     client(40, 200), endpoint(460, 200),
     box(880, 80, "GitHub", "identity only", "slate", "user id == OWNER_GITHUB_ID?", icons=("github",)),
     box(880, 340, "KV", "OAuth grants", "slate", "token checked on every call", icons=("key",)),
-    arrow([(260, 210), (460, 210)], "1 register · authorize", flow="auth"),
-    arrow([(570, 200), (570, 112), (880, 112)], "2 sign in", at=0.25, flow="auth"),
-    arrow([(880, 132), (630, 132), (630, 200)], "3 callback", at=0.25, flow="auth"),
-    arrow([(570, 264), (570, 372), (880, 372)], "4 store grant", flow="auth"),
-    arrow([(460, 234), (260, 234)], "5 access token", flow="auth"),
-    arrow([(260, 258), (460, 258)], "6 /mcp + Bearer", flow="auth"),
+    arrow([(260, 210), (460, 210)], "1. register · authorize", flow="auth"),
+    arrow([(570, 200), (570, 112), (880, 112)], "2. sign in", at=0.25, flow="auth"),
+    arrow([(880, 132), (630, 132), (630, 200)], "3. callback", at=0.25, flow="auth"),
+    arrow([(570, 264), (570, 372), (880, 372)], "4. store grant", flow="auth"),
+    arrow([(460, 234), (260, 234)], "5. access token", flow="auth"),
+    arrow([(260, 258), (460, 258)], "6. /mcp + Bearer", flow="auth"),
 ])
 
 # 2. write
@@ -31,21 +31,21 @@ save("2-write", 1560, 400, "Flow 2 · Write a note", "One Durable Object per rep
     box(880, 110, "RepoWriter", "Durable Object · mutex", "indigo", "stale expected_version → conflict", icons=("lock",), kind="part"),
     box(1300, 110, "Artifacts", "Git · source of truth", "green", "branch moved → re-apply (3 tries)", icons=("branch",)),
     box(880, 290, "Queue", "index-jobs", "orange", icons=("queue",)),
-    arrow([(260, 126), (460, 126)], "1 write_note", flow="write"),
-    arrow([(680, 142), (880, 142)], "2 one at a time", flow="write"),
-    arrow([(1100, 142), (1300, 142)], "3 commit + push", flow="write"),
-    arrow([(570, 174), (570, 322), (880, 322)], "4 enqueue path", flow="index"),
-    arrow([(460, 160), (260, 160)], "5 ok · version", flow="write"),
+    arrow([(260, 126), (460, 126)], "1. write_note", flow="write"),
+    arrow([(680, 142), (880, 142)], "2. one at a time", flow="write"),
+    arrow([(1100, 142), (1300, 142)], "3. commit + push", flow="write"),
+    arrow([(570, 174), (570, 322), (880, 322)], "4. enqueue path", flow="index"),
+    arrow([(460, 160), (260, 160)], "5. ok · version", flow="write"),
 ])
 
 # 4. read
 save("4-read", 1140, 340, "Flow 4 · Read a note", "Straight from Git; the reply carries the version for a later write.", [
     client(40, 160), endpoint(460, 160),
     box(880, 160, "Artifacts", "Git · source of truth", "green", icons=("branch",)),
-    arrow([(260, 176), (460, 176)], "1 read_note", flow="read"),
-    arrow([(680, 176), (880, 176)], "2 read file", flow="read"),
-    arrow([(880, 208), (680, 208)], "3 content", flow="read"),
-    arrow([(460, 208), (260, 208)], "4 text + version", flow="read"),
+    arrow([(260, 176), (460, 176)], "1. read_note", flow="read"),
+    arrow([(680, 176), (880, 176)], "2. read file", flow="read"),
+    arrow([(880, 208), (680, 208)], "3. content", flow="read"),
+    arrow([(460, 208), (260, 208)], "4. text + version", flow="read"),
 ])
 
 # 3. index
@@ -57,12 +57,12 @@ save("3-index", 1640, 440, "Flow 3 · Index in the background", "Two producers i
     box(1380, 60, "D1", "manifest · FTS5 chunks", "red", icons=("database",)),
     box(1380, 200, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"),
     box(1380, 340, "Vectorize", "semantic index", "teal", icons=("search",)),
-    arrow([(260, 112), (400, 112), (400, 214), (460, 214)], "1 enqueue", flow="index"),
-    arrow([(260, 232), (460, 232)], "1 pushed", flow="index"),
-    arrow([(680, 232), (880, 232)], "2 deliver", flow="index"),
-    arrow([(1100, 232), (1380, 232)], "3 embed chunks", flow="index"),
-    arrow([(1100, 248), (1150, 248), (1150, 372), (1380, 372)], "4 upsert h-seq", flow="index"),
-    arrow([(1100, 216), (1150, 216), (1150, 92), (1380, 92)], "5 manifest + FTS", flow="index"),
+    arrow([(260, 112), (400, 112), (400, 214), (460, 214)], "1. enqueue", flow="index"),
+    arrow([(260, 232), (460, 232)], "1. pushed", flow="index"),
+    arrow([(680, 232), (880, 232)], "2. deliver", flow="index"),
+    arrow([(1100, 232), (1380, 232)], "3. embed chunks", flow="index"),
+    arrow([(1100, 248), (1150, 248), (1150, 372), (1380, 372)], "4. upsert h-seq", flow="index"),
+    arrow([(1100, 216), (1150, 216), (1150, 92), (1380, 92)], "5. manifest + FTS", flow="index"),
 ])
 
 # 6. reconcile
@@ -75,9 +75,9 @@ save("6-reconcile", 1160, 480, "Flow 6 · Reconciliation", "The schedule is a se
     box(880, 184, "D1", "manifest · FTS5 chunks", "red", icons=("database",)),
     box(880, 340, "Queue", "index-jobs", "orange", "missing · changed · orphans · keyword gaps", icons=("queue",)),
     arrow([(260, 216), (460, 216)], "start", flow="index"),
-    arrow([(570, 184), (570, 112), (880, 112)], "1 notes + sha", flow="index"),
-    arrow([(680, 216), (880, 216)], "2 what's indexed", flow="index"),
-    arrow([(570, 248), (570, 372), (880, 372)], "3 diff · 4 enqueue", flow="index"),
+    arrow([(570, 184), (570, 112), (880, 112)], "1. notes + sha", flow="index"),
+    arrow([(680, 216), (880, 216)], "2. what's indexed", flow="index"),
+    arrow([(570, 248), (570, 372), (880, 372)], "3. diff · 4. enqueue", flow="index"),
 ])
 
 # 7. failure
@@ -87,11 +87,11 @@ save("7-failure", 1560, 360, "Flow 7 · A job that keeps failing", "Retries with
     box(880, 100, "DLQ", "index-jobs-dlq", "red", icons=("queue",)),
     box(1300, 100, "DLQ consumer", "Worker · queue()", "indigo", icons=("workers",), kind="part"),
     box(1300, 250, "D1", "alerts table", "red", "nothing reads it yet", icons=("database",)),
-    arrow([(260, 116), (460, 116)], "1 deliver", flow="index"),
-    arrow([(460, 150), (260, 150)], "2 throws", flow="fail"),
-    arrow([(150, 164), (150, 230), (990, 230), (990, 164)], "3 after 5 failures", flow="fail"),
-    arrow([(1100, 132), (1300, 132)], "4 deliver", flow="fail"),
-    arrow([(1410, 164), (1410, 250)], "5 alert row · ack", flow="fail"),
+    arrow([(260, 116), (460, 116)], "1. deliver", flow="index"),
+    arrow([(460, 150), (260, 150)], "2. throws", flow="fail"),
+    arrow([(150, 164), (150, 230), (990, 230), (990, 164)], "3. after 5 failures", flow="fail"),
+    arrow([(1100, 132), (1300, 132)], "4. deliver", flow="fail"),
+    arrow([(1410, 164), (1410, 250)], "5. alert row · ack", flow="fail"),
 ])
 
 # 5. search
@@ -100,10 +100,10 @@ save("5-search", 1560, 380, "Flow 5 · Search", "Keyword and meaning in parallel
     box(880, 80, "D1", "FTS5 · BM25", "red", icons=("database",)),
     box(880, 200, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"),
     box(1300, 200, "Vectorize", "nearest chunks", "teal", "cosine ≥ 0.30", icons=("search",)),
-    arrow([(260, 216), (460, 216)], "1 search_notes", flow="read"),
-    arrow([(570, 200), (570, 112), (880, 112)], "2a keyword", flow="read"),
-    arrow([(680, 232), (880, 232)], "2b embed query", flow="read"),
-    arrow([(1100, 232), (1300, 232)], "3 query vector", flow="read"),
-    arrow([(460, 250), (260, 250)], "4 ranked notes", flow="read"),
+    arrow([(260, 216), (460, 216)], "1. search_notes", flow="read"),
+    arrow([(570, 200), (570, 112), (880, 112)], "2a. keyword", flow="read"),
+    arrow([(680, 232), (880, 232)], "2b. embed query", flow="read"),
+    arrow([(1100, 232), (1300, 232)], "3. query vector", flow="read"),
+    arrow([(460, 250), (260, 250)], "4. ranked notes", flow="read"),
 ])
 print("flows ok")
