@@ -49,10 +49,9 @@ save("4-read", 1140, 340, "Flow 4 · Read a note", "Straight from Git; the reply
 ])
 
 # 4. index
-save("3-index", 1640, 500, "Flow 3 · Index in the background", "Three producers, one consumer: the only writer of the keyword and semantic indexes.", [
+save("3-index", 1640, 440, "Flow 3 · Index in the background", "Two producers in real time (the daily repair is flow 6), one consumer: the only writer of both indexes.", [
     endpoint(40, 80, "after each write"),
     box(40, 200, "Artifacts", "push event", "green", icons=("branch",)),
-    box(40, 320, "Reconcile", "Workflow · daily", "indigo", "daily repair · see flow 6", icons=("workflow",), kind="part"),
     box(460, 200, "Queue", "index-jobs · path only", "orange", icons=("queue",)),
     box(880, 200, "Queue consumer", "Worker · queue()", "indigo", "same sha → skip · head moved → requeue", icons=("workers",), kind="part"),
     box(1380, 60, "D1", "manifest · FTS5 chunks", "red", icons=("database",)),
@@ -60,7 +59,6 @@ save("3-index", 1640, 500, "Flow 3 · Index in the background", "Three producers
     box(1380, 340, "Vectorize", "semantic index", "teal", icons=("search",)),
     arrow([(260, 112), (400, 112), (400, 214), (460, 214)], "1 enqueue", flow="index"),
     arrow([(260, 232), (460, 232)], "1 pushed", flow="index"),
-    arrow([(260, 352), (400, 352), (400, 250), (460, 250)], "1 missing", flow="index"),
     arrow([(680, 232), (880, 232)], "2 deliver", flow="index"),
     arrow([(1100, 232), (1380, 232)], "3 embed chunks", flow="index"),
     arrow([(1100, 248), (1150, 248), (1150, 372), (1380, 372)], "4 upsert h-seq", flow="index"),
