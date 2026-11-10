@@ -66,16 +66,18 @@ save("3-index", 1640, 440, "Flow 3 · Index in the background", "Two producers i
 ])
 
 # 6. reconcile
-save("6-reconcile", 1160, 480, "Flow 6 · Reconciliation", "A daily Workflow compares the notes with the index and enqueues only what differs; the consumer does the rest.", [
-    box(40, 200, "Cron", "0 4 * * * · /admin/reconcile", "slate", icons=("workflow",)),
-    box(460, 200, "Reconcile", "Workflow · durable steps", "indigo", icons=("workflow",), kind="part"),
+save("6-reconcile", 1160, 480, "Flow 6 · Reconciliation", "The schedule is a setting of the Workflow itself (also started by POST /admin/reconcile); it enqueues only what differs.", [
+    '<rect x="20" y="160" width="680" height="140" rx="8" fill="#5B5BD6" fill-opacity="0.06" stroke="#5B5BD6" stroke-width="1.5" stroke-dasharray="6 4"/>'
+    '<text x="34" y="292" class="gl" style="fill:#5B5BD6">WORKFLOW reconcile · Settings › Schedules</text>',
+    box(40, 184, "Schedule", "cron 0 4 * * * (UTC)", "indigo", icons=("workflow",), kind="part"),
+    box(460, 184, "Reconcile", "Workflow · durable steps", "indigo", icons=("workflow",), kind="part"),
     box(880, 80, "Artifacts", "Git · source of truth", "green", icons=("branch",)),
-    box(880, 200, "D1", "manifest · FTS5 chunks", "red", icons=("database",)),
+    box(880, 184, "D1", "manifest · FTS5 chunks", "red", icons=("database",)),
     box(880, 340, "Queue", "index-jobs", "orange", "missing · changed · orphans · keyword gaps", icons=("queue",)),
-    arrow([(260, 232), (460, 232)], "start", flow="index"),
-    arrow([(570, 200), (570, 112), (880, 112)], "1 notes + sha", flow="index"),
-    arrow([(680, 232), (880, 232)], "2 what's indexed", flow="index"),
-    arrow([(570, 264), (570, 372), (880, 372)], "3 diff · 4 enqueue", flow="index"),
+    arrow([(260, 216), (460, 216)], "start", flow="index"),
+    arrow([(570, 184), (570, 112), (880, 112)], "1 notes + sha", flow="index"),
+    arrow([(680, 216), (880, 216)], "2 what's indexed", flow="index"),
+    arrow([(570, 248), (570, 372), (880, 372)], "3 diff · 4 enqueue", flow="index"),
 ])
 
 # 7. failure
