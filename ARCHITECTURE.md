@@ -19,31 +19,31 @@
 
 ### 1. Sign-in
 
-<img src="docs/architecture/flows/1-sign-in.png" alt="Flow 1: Sign-in" width="640">
+<img src="docs/architecture/flows/1-sign-in.png" alt="Flow 1: Sign-in" width="760">
 
 ### 2. Write a note
 
-<img src="docs/architecture/flows/2-write.png" alt="Flow 2: Write a note" width="640">
+<img src="docs/architecture/flows/2-write.png" alt="Flow 2: Write a note" width="760">
 
 ### 3. Index in the background
 
-<img src="docs/architecture/flows/3-index.png" alt="Flow 3: Index in the background" width="640">
+<img src="docs/architecture/flows/3-index.png" alt="Flow 3: Index in the background" width="760">
 
 ### 4. Read a note
 
-<img src="docs/architecture/flows/4-read.png" alt="Flow 4: Read a note" width="640">
+<img src="docs/architecture/flows/4-read.png" alt="Flow 4: Read a note" width="760">
 
 ### 5. Search
 
-<img src="docs/architecture/flows/5-search.png" alt="Flow 5: Search" width="640">
+<img src="docs/architecture/flows/5-search.png" alt="Flow 5: Search" width="760">
 
 ### 6. Reconciliation
 
-<img src="docs/architecture/flows/6-reconcile.png" alt="Flow 6: Reconciliation" width="640">
+<img src="docs/architecture/flows/6-reconcile.png" alt="Flow 6: Reconciliation" width="760">
 
 ### 7. A job that keeps failing
 
-<img src="docs/architecture/flows/7-failure.png" alt="Flow 7: A job that keeps failing" width="640">
+<img src="docs/architecture/flows/7-failure.png" alt="Flow 7: A job that keeps failing" width="760">
 
 ## Repository
 
