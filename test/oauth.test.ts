@@ -168,7 +168,9 @@ describe("consent and sign-in", () => {
       });
     const listed = await mcpCall();
     expect(listed.status).toBe(200);
-    expect(await listed.text()).toContain("semantic_search");
+    const tools = await listed.text();
+    expect(tools).toContain("search_notes");
+    expect(tools).not.toContain("semantic_search"); // removed in ADR 015
     const grant = (await listGrants()).find((g) => g.clientId === clientId)!;
     await fetchWorker(`/admin/grants/${encodeURIComponent(grant.id)}`, { method: "DELETE", headers: { Authorization: "Bearer test-admin" } });
     expect((await mcpCall()).status).toBe(401);
