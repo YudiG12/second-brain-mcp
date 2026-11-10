@@ -39,7 +39,7 @@ save("2-write", 1560, 400, "Flow 2 · Write a note", "One Durable Object per rep
 ])
 
 # 3. read
-save("3-read", 1140, 340, "Flow 3 · Read a note", "Straight from Git; the reply carries the version for a later write.", [
+save("4-read", 1140, 340, "Flow 4 · Read a note", "Straight from Git; the reply carries the version for a later write.", [
     client(40, 160), endpoint(460, 160),
     box(880, 160, "Artifacts", "Git · source of truth", "green", icons=("branch",)),
     arrow([(260, 176), (460, 176)], "1 read_note", flow="read"),
@@ -49,7 +49,7 @@ save("3-read", 1140, 340, "Flow 3 · Read a note", "Straight from Git; the reply
 ])
 
 # 4. index
-save("5-index", 1640, 500, "Flow 5 · Index in the background", "Three producers, one consumer: the only writer of the keyword and semantic indexes.", [
+save("3-index", 1640, 500, "Flow 3 · Index in the background", "Three producers, one consumer: the only writer of the keyword and semantic indexes.", [
     endpoint(40, 80, "after each write"),
     box(40, 200, "Artifacts", "push event", "green", icons=("branch",)),
     box(40, 320, "Reconcile", "Workflow · daily", "indigo", "daily repair · see flow 6", icons=("workflow",), kind="part"),
@@ -97,7 +97,7 @@ save("7-failure", 1560, 420, "Flow 7 · A job that keeps failing", "Retries with
 ])
 
 # 7. search
-save("4-search", 1560, 380, "Flow 4 · Search", "Keyword and meaning in parallel, fused by reciprocal rank: 1 / (60 + rank).", [
+save("5-search", 1560, 380, "Flow 5 · Search", "Keyword and meaning in parallel, fused by reciprocal rank: 1 / (60 + rank).", [
     client(40, 200), endpoint(460, 200, "RRF fuse · best chunk per note"),
     box(880, 80, "D1", "FTS5 · BM25", "red", icons=("database",)),
     box(880, 200, "Workers AI", "model API · bge-m3", "teal", icons=("sparkles",), kind="api"),
