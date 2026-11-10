@@ -53,19 +53,35 @@ In the plan note, change the deadline to Friday.
 
 ## Architecture
 
+### Overview
+
 ![Architecture of v2](docs/architecture/v2.png)
+
+### 1. Sign-in
 
 <p align="center"><img src="docs/architecture/flows/1-sign-in.png" alt="Flow 1-sign-in" width="760"></p>
 
+### 2. Write a note
+
 <p align="center"><img src="docs/architecture/flows/2-write.png" alt="Flow 2-write" width="760"></p>
+
+### 3. Index in the background
 
 <p align="center"><img src="docs/architecture/flows/3-index.png" alt="Flow 3-index" width="760"></p>
 
+### 4. Read a note
+
 <p align="center"><img src="docs/architecture/flows/4-read.png" alt="Flow 4-read" width="760"></p>
+
+### 5. Search
 
 <p align="center"><img src="docs/architecture/flows/5-search.png" alt="Flow 5-search" width="760"></p>
 
+### 6. Reconciliation
+
 <p align="center"><img src="docs/architecture/flows/6-reconcile.png" alt="Flow 6-reconcile" width="760"></p>
+
+### 7. A job that keeps failing
 
 <p align="center"><img src="docs/architecture/flows/7-failure.png" alt="Flow 7-failure" width="760"></p>
 
