@@ -165,7 +165,7 @@ v2.append(arrow([(660, 282), (800, 282)], "write the note", flow="write", dy=-22
 v2.append(arrow([(1020, 282), (1160, 282)], flow="write"))
 # into the Queue: enqueue after a write, the push event, and the daily repair
 v2.append(arrow([(620, 314), (620, 364), (1240, 364), (1240, 410)], flow="index"))
-v2.append(arrow([(1300, 314), (1300, 410)], "index in the background", at=0.25, flow="index"))
+v2.append(arrow([(1300, 314), (1300, 410)], "push event · index in the background", at=0.25, flow="index"))
 v2.append(arrow([(550, 410), (550, 388), (1200, 388), (1200, 410)], "reconciliation", at=0.2, flow="index"))
 # the consumer takes jobs, asks for embeddings, writes both indexes
 v2.append(arrow([(1160, 442), (1020, 442)], flow="index"))
