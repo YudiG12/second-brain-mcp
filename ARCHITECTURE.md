@@ -4,6 +4,7 @@ The low-level design: every component, how it works and the decision behind it. 
 
 ![Architecture of v2](docs/architecture/v2.png)
 
+
 | Concern | How | Decision |
 |---|---|---|
 | Where notes live | Cloudflare **Artifacts** (Git), read through a binding | [ADR 007](docs/adr/007-cloudflare-artifacts-for-the-notes.md) |
@@ -18,6 +19,38 @@ The low-level design: every component, how it works and the decision behind it. 
 **Limits of this design.** All writes to one repository go through one Durable Object, about two writes per second from the spike's measurements; a team would shard by repository ([at scale](docs/design/at-scale.md)). A missed push event waits for the daily reconciliation, so the index can lag by up to a day, never stay wrong.
 
 The full design, with flows and consistency rules, is in the [v2 spec](docs/spec/v2.md). For comparison, [v1](docs/architecture/v1.png).
+
+## Flows
+
+One map per flow, in the order a note lives them: sign in, write, index, then read and search; the daily repair and the failure path last. Numbers on the arrows give the order of the steps. Drawn by [`draw_flows.py`](docs/architecture/draw_flows.py).
+
+### 1. Sign-in
+
+![Flow 1: Sign-in](docs/architecture/flows/1-sign-in.png)
+
+### 2. Write a note
+
+![Flow 2: Write a note](docs/architecture/flows/2-write.png)
+
+### 3. Index in the background
+
+![Flow 3: Index in the background](docs/architecture/flows/3-index.png)
+
+### 4. Read a note
+
+![Flow 4: Read a note](docs/architecture/flows/4-read.png)
+
+### 5. Search
+
+![Flow 5: Search](docs/architecture/flows/5-search.png)
+
+### 6. Reconciliation
+
+![Flow 6: Reconciliation](docs/architecture/flows/6-reconcile.png)
+
+### 7. A job that keeps failing
+
+![Flow 7: A job that keeps failing](docs/architecture/flows/7-failure.png)
 
 ## Repository
 
