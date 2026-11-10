@@ -81,19 +81,17 @@ save("6-reconcile", 1160, 480, "Flow 6 · Reconciliation", "The schedule is a se
 ])
 
 # 7. failure
-save("7-failure", 1560, 420, "Flow 7 · A job that keeps failing", "Retries with backoff, then the dead-letter queue; the daily reconciliation tries again.", [
+save("7-failure", 1560, 360, "Flow 7 · A job that keeps failing", "Retries with backoff, then the dead-letter queue. The note stays out of the index until flow 6 enqueues it again.", [
     box(40, 100, "Queue", "retry 10·20·40·80·160 s", "orange", icons=("queue",)),
     box(460, 100, "Queue consumer", "Worker · queue()", "indigo", icons=("workers",), kind="part"),
     box(880, 100, "DLQ", "index-jobs-dlq", "red", icons=("queue",)),
     box(1300, 100, "DLQ consumer", "Worker · queue()", "indigo", icons=("workers",), kind="part"),
-    box(1300, 320, "D1", "alerts table", "red", "nothing reads it yet", icons=("database",)),
-    box(460, 320, "Reconcile", "Workflow · daily", "indigo", icons=("workflow",), kind="part"),
+    box(1300, 250, "D1", "alerts table", "red", "nothing reads it yet", icons=("database",)),
     arrow([(260, 116), (460, 116)], "1 deliver", flow="index"),
     arrow([(460, 150), (260, 150)], "2 throws", flow="fail"),
     arrow([(150, 164), (150, 230), (990, 230), (990, 164)], "3 after 5 failures", flow="fail"),
     arrow([(1100, 132), (1300, 132)], "4 deliver", flow="fail"),
-    arrow([(1410, 164), (1410, 320)], "5 alert row · ack", flow="fail"),
-    arrow([(570, 320), (570, 280), (110, 280), (110, 164)], "6 next day: enqueue again", flow="index"),
+    arrow([(1410, 164), (1410, 250)], "5 alert row · ack", flow="fail"),
 ])
 
 # 5. search
