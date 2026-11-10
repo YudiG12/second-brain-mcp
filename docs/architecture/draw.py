@@ -83,7 +83,7 @@ def arrow(points, label=None, at=0.5, both=False, flow=None, dy=0):
         segs = list(zip(points, points[1:]))
         (x1, y1), (x2, y2) = max(segs, key=lambda s: abs(s[1][0]-s[0][0]) + abs(s[1][1]-s[0][1]))
         lx, ly = x1 + (x2 - x1) * at, y1 + (y2 - y1) * at + dy  # dy: lift the pill off a short arrow
-        w = 7.2 * len(label) + 16
+        w = 8.2 * len(label) + 18
         t += f'<rect x="{lx - w/2}" y="{ly - 11}" width="{w}" height="22" rx="11" fill="{FLOW[flow] if flow else NAVY}"/>'
         t += f'<text x="{lx}" y="{ly + 4}" text-anchor="middle" class="p">{html.escape(label)}</text>'
     return t
@@ -94,12 +94,12 @@ def svg(width, height, title, subtitle, body):
 <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>
 {FLOW_MARKERS}
 <marker id="ms" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>
-<style>.t{{fill:#fff;font-size:15px;font-weight:700}}.s{{fill:#fff;font-size:12px;opacity:.92}}.c{{fill:{MUTED};font-size:12px}}
-.a{{fill:none;stroke:{LINE};stroke-width:1.6;stroke-dasharray:6 5}}.p{{fill:#fff;font-size:11.5px;font-weight:600}}
-.h{{fill:{NAVY};font-size:22px;font-weight:800}}.hs{{fill:{MUTED};font-size:13px}}.g{{fill:none;stroke:#E6D5C1;stroke-width:1.5;stroke-dasharray:2 4}}.gl{{fill:#8C6A43;font-size:12px;font-weight:600}}.lg{{fill:{NAVY};font-size:13px;font-weight:600}}.ft{{font-size:12px;font-weight:700;letter-spacing:.06em}}</style>
+<style>.t{{fill:#fff;font-size:17px;font-weight:700}}.s{{fill:#fff;font-size:13.5px;opacity:.92}}.c{{fill:{MUTED};font-size:14px}}
+.a{{fill:none;stroke:{LINE};stroke-width:1.6;stroke-dasharray:6 5}}.p{{fill:#fff;font-size:13px;font-weight:600}}
+.h{{fill:{NAVY};font-size:26px;font-weight:800}}.hs{{fill:{MUTED};font-size:15px}}.g{{fill:none;stroke:#E6D5C1;stroke-width:1.5;stroke-dasharray:2 4}}.gl{{fill:#8C6A43;font-size:13.5px;font-weight:600}}.lg{{fill:{NAVY};font-size:13px;font-weight:600}}.ft{{font-size:12px;font-weight:700;letter-spacing:.06em}}</style>
 </defs>
 <rect width="100%" height="100%" fill="{BG}"/>
-<text x="32" y="44" class="h">{html.escape(title)}</text><text x="32" y="66" class="hs">{html.escape(subtitle)}</text>
+<text x="32" y="44" class="h">{html.escape(title)}</text><text x="32" y="70" class="hs">{html.escape(subtitle)}</text>
 {body}
 </svg>'''
 
@@ -134,7 +134,7 @@ v2.append('<rect x="376" y="80" width="1404" height="680" rx="10" class="g"/>' +
 v2.append('<rect x="24" y="92" width="252" height="128" rx="10" class="g"/><text x="38" y="112" class="gl">SIGN-IN PROVIDER</text>')
 v2.append(box(A, 124, "GitHub", "identity only", "slate", "owner's account, no scopes", icons=("github",)))
 v2.append('<rect x="24" y="236" width="252" height="236" rx="10" class="g"/><text x="38" y="256" class="gl">MCP CLIENTS</text>')
-v2.append(box(A, 260, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude", "chat")) + devices(A + 110, 342, ("monitor", "smartphone"), "Mac (web) and phone"))
+v2.append(box(A, 260, "Claude · ChatGPT", "MCP clients", "slate", icons=("claude",)) + devices(A + 110, 342, ("monitor", "smartphone"), "Mac (web) and phone"))
 v2.append(box(A, 376, "Claude Code", "MCP client", "slate", icons=("terminal",)) + devices(A + 110, 458, ("laptop",), "on the MacBook"))
 v2.append(box(X1, 110, "KV", "OAuth grants", "slate", icons=("key",)))
 # The Worker is one deployable: an area holding its four parts, all the same style.
@@ -143,7 +143,7 @@ v2.append('<rect x="410" y="232" width="626" height="272" rx="8" fill="#5B5BD6" 
           '<text x="424" y="496" class="gl" style="fill:#5B5BD6">WORKER</text>')
 # row 1: the write
 v2.append(box(X1, 250, "MCP endpoint", "OAuth · tools · admin", "indigo", icons=("workers",), kind="part"))
-v2.append(box(X2, 250, "RepoWriter", "Durable Object · single writer", "indigo", icons=("lock",), kind="part"))
+v2.append(box(X2, 250, "RepoWriter", "Durable Object · 1 writer", "indigo", icons=("lock",), kind="part"))
 v2.append(box(X3, 250, "Artifacts", "Git · source of truth", "green", icons=("branch",)))
 # row 2: indexing
 v2.append(box(X1, 410, "Reconcile", "Workflow · runs daily", "indigo", icons=("workflow",), kind="part"))

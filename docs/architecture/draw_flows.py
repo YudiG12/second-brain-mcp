@@ -17,7 +17,7 @@ save("1-sign-in", 1160, 460, "Flow 1 · Sign-in", "OAuth 2.1 with GitHub as the 
     client(40, 200), endpoint(460, 200),
     box(880, 80, "GitHub", "identity only", "slate", "user id == OWNER_GITHUB_ID?", icons=("github",)),
     box(880, 340, "KV", "OAuth grants", "slate", "token checked on every call", icons=("key",)),
-    arrow([(260, 210), (460, 210)], "1. register · authorize", flow="auth"),
+    arrow([(260, 210), (460, 210)], "1. register", flow="auth"),
     arrow([(570, 200), (570, 112), (880, 112)], "2. sign in", at=0.25, flow="auth"),
     arrow([(880, 132), (630, 132), (630, 200)], "3. callback", at=0.25, flow="auth"),
     arrow([(570, 264), (570, 372), (880, 372)], "4. store grant", flow="auth"),
