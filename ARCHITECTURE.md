@@ -19,31 +19,31 @@
 
 ### 1. Sign-in
 
-![Flow 1: Sign-in](docs/architecture/flows/1-sign-in.png)
+<img src="docs/architecture/flows/1-sign-in.png" alt="Flow 1: Sign-in" width="640">
 
 ### 2. Write a note
 
-![Flow 2: Write a note](docs/architecture/flows/2-write.png)
+<img src="docs/architecture/flows/2-write.png" alt="Flow 2: Write a note" width="640">
 
 ### 3. Index in the background
 
-![Flow 3: Index in the background](docs/architecture/flows/3-index.png)
+<img src="docs/architecture/flows/3-index.png" alt="Flow 3: Index in the background" width="640">
 
 ### 4. Read a note
 
-![Flow 4: Read a note](docs/architecture/flows/4-read.png)
+<img src="docs/architecture/flows/4-read.png" alt="Flow 4: Read a note" width="640">
 
 ### 5. Search
 
-![Flow 5: Search](docs/architecture/flows/5-search.png)
+<img src="docs/architecture/flows/5-search.png" alt="Flow 5: Search" width="640">
 
 ### 6. Reconciliation
 
-![Flow 6: Reconciliation](docs/architecture/flows/6-reconcile.png)
+<img src="docs/architecture/flows/6-reconcile.png" alt="Flow 6: Reconciliation" width="640">
 
 ### 7. A job that keeps failing
 
-![Flow 7: A job that keeps failing](docs/architecture/flows/7-failure.png)
+<img src="docs/architecture/flows/7-failure.png" alt="Flow 7: A job that keeps failing" width="640">
 
 ## Repository
 
