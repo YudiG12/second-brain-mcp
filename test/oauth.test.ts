@@ -171,6 +171,13 @@ describe("consent and sign-in", () => {
     const tools = await listed.text();
     expect(tools).toContain("search_notes");
     expect(tools).not.toContain("semantic_search"); // removed in ADR 015
+    // MCP tool annotations: reads are read-only, delete is destructive
+    const body = tools.includes("data: ") ? tools.split("data: ").pop()!.trim() : tools;
+    const byName = Object.fromEntries((JSON.parse(body).result.tools as any[]).map((t) => [t.name, t.annotations]));
+    expect(byName.read_note).toMatchObject({ readOnlyHint: true, openWorldHint: false });
+    expect(byName.search_notes).toMatchObject({ readOnlyHint: true });
+    expect(byName.save_idea).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    expect(byName.delete_note).toMatchObject({ destructiveHint: true, idempotentHint: true });
     const grant = (await listGrants()).find((g) => g.clientId === clientId)!;
     await fetchWorker(`/admin/grants/${encodeURIComponent(grant.id)}`, { method: "DELETE", headers: { Authorization: "Bearer test-admin" } });
     expect((await mcpCall()).status).toBe(401);
