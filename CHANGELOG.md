@@ -7,6 +7,7 @@
 - **Every client reads and writes only through MCP**, Claude Code on the Mac included. Every write now goes through the Durable Object and its version check ([ADR 014](docs/adr/014-mcp-only-clients.md)).
 
 ### Added
+- **MCP tool annotations** on every tool: reads are `readOnlyHint`, `save_idea` only creates, `write_note`/`edit_note`/`move_note`/`delete_note` are `destructiveHint` (`delete_note` also `idempotentHint`), none is `openWorldHint`. Hints for clients (parallel reads, safe retries, when to ask for approval), not a security control.
 - `npm run mirror`: an optional read-only copy of the notes in a folder, for viewing (Obsidian's graph view). It fetches and resets; it never edits or pushes.
 
 ### Removed

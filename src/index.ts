@@ -119,18 +119,26 @@ async function write(op: Operation, done: string): Promise<string> {
 
 // ---------- MCP tools ----------
 
+// MCP tool annotations: hints the client may use (Claude Code runs read-only calls in parallel and retries
+// read-only or idempotent calls after a dropped connection; other clients may decide when to ask for approval).
+// A server declares them and a client can't verify them, so they are not a security control.
+const READ = { readOnlyHint: true, openWorldHint: false };
+const CREATE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const OVERWRITE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+const DELETE = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+
 function createServer() {
   const server = new McpServer({ name: "second-brain", version: "0.3.0" });
 
   server.registerTool(
     "list_notes",
-    { description: "Lists the notes in Yudi's second brain (Markdown file paths, e.g. ideias/..., projetos/..., decisoes/...).", inputSchema: { prefix: z.string().optional() } },
+    { annotations: READ, description: "Lists the notes in Yudi's second brain (Markdown file paths, e.g. ideias/..., projetos/..., decisoes/...).", inputSchema: { prefix: z.string().optional() } },
     async ({ prefix }) => text((await listNotes(E.ARTIFACTS, prefix ?? "")).join("\n") || "No notes."),
   );
 
   server.registerTool(
     "read_note",
-    { description: "Reads a whole note by path (e.g. visao-geral.md, projetos/cafezinho.md). Also returns its version, which write_note needs to overwrite it.", inputSchema: { path: z.string() } },
+    { annotations: READ, description: "Reads a whole note by path (e.g. visao-geral.md, projetos/cafezinho.md). Also returns its version, which write_note needs to overwrite it.", inputSchema: { path: z.string() } },
     async ({ path }) => {
       const p = checkPath(path); // same rules as writes (#30)
       const body = await readNote(E.ARTIFACTS, p);
@@ -143,7 +151,7 @@ function createServer() {
   server.registerTool(
     "search_notes",
     {
-      description: "Hybrid search across notes: exact words (names, acronyms, terms) and meaning, in one ranked list. Each result says how it matched: keyword, semantic or both. Ignores accents and case; words match by prefix.",
+      annotations: READ, description: "Hybrid search across notes: exact words (names, acronyms, terms) and meaning, in one ranked list. Each result says how it matched: keyword, semantic or both. Ignores accents and case; words match by prefix.",
       inputSchema: { query: z.string(), limit: z.number().int().min(1).max(20).optional() },
     },
     async ({ query, limit }) => {
@@ -171,7 +179,7 @@ function createServer() {
 
   server.registerTool(
     "save_idea",
-    { description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it.", inputSchema: { title: z.string(), content: z.string() } },
+    { annotations: CREATE, description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it.", inputSchema: { title: z.string(), content: z.string() } },
     async ({ title, content }) => {
       // never overwrite another idea with the same title on the same day (#31): try -2, -3...
       const base = await ideaPath(title);
@@ -189,7 +197,7 @@ function createServer() {
   server.registerTool(
     "write_note",
     {
-      description: "Creates a note, or overwrites a whole one (e.g. projetos/cafezinho.md). To overwrite, pass expected_version: the version read_note returned. If the note changed since, nothing is saved and you get a conflict: read it again and redo the change. To change only part of a note, prefer edit_note.",
+      annotations: OVERWRITE, description: "Creates a note, or overwrites a whole one (e.g. projetos/cafezinho.md). To overwrite, pass expected_version: the version read_note returned. If the note changed since, nothing is saved and you get a conflict: read it again and redo the change. To change only part of a note, prefer edit_note.",
       inputSchema: { path: z.string(), content: z.string(), expected_version: z.string().optional() },
     },
     async ({ path, content, expected_version }) => {
@@ -200,7 +208,7 @@ function createServer() {
 
   server.registerTool(
     "edit_note",
-    { description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
+    { annotations: OVERWRITE, description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
     async ({ path, old_text, new_text }) => {
       const p = checkPath(path);
       return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text }, `Edited: ${p}`));
@@ -209,7 +217,7 @@ function createServer() {
 
   server.registerTool(
     "delete_note",
-    { description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
+    { annotations: DELETE, description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
     async ({ path }) => {
       const p = checkPath(path);
       return text(await write({ kind: "delete", path: p }, `Deleted: ${p}`));
@@ -218,7 +226,7 @@ function createServer() {
 
   server.registerTool(
     "move_note",
-    { description: "Moves or renames a note in one commit (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
+    { annotations: OVERWRITE, description: "Moves or renames a note in one commit (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
     async ({ from, to }) => {
       const a = checkPath(from), b = checkPath(to);
       return text(await write({ kind: "move", from: a, to: b }, `Moved: ${a} -> ${b}`));
