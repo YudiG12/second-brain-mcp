@@ -18,3 +18,14 @@ export function auditEntries(body: unknown): AuditEntry[] {
   const msgs = Array.isArray(body) ? body : [body];
   return msgs.map(entry).filter((e): e is AuditEntry => e !== null);
 }
+
+/**
+ * The MCP client behind a tool call, for the commit's audit trail: the SDK's verified client id when
+ * it has one, else the one the Worker copied into the request props from the OAuth context.
+ */
+export function clientOf(extra: unknown, props: Record<string, unknown> | undefined): string | undefined {
+  const sdk = (extra as { authInfo?: { clientId?: unknown } } | undefined)?.authInfo?.clientId;
+  if (typeof sdk === "string" && sdk) return sdk;
+  const fromProps = props?.clientId;
+  return typeof fromProps === "string" && fromProps ? fromProps : undefined;
+}

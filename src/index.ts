@@ -3,7 +3,7 @@
 // Reads go through the binding; writes go through one Durable Object per repository (ADR 008).
 // Vectorize is only an index on top, rebuildable at any time.
 import { McpServer } from "@modelcontextprotocol/server";
-import { createMcpHandler } from "agents/mcp/server";
+import { createMcpHandler, getMcpAuthContext } from "agents/mcp/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { ArtifactsNotes, D1Keywords, D1Manifest, VectorizeAdapter, WorkersAiEmbedder } from "./indexer/adapters";
@@ -17,7 +17,7 @@ import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 // 0.44, so no floor separates them (ADR 012, #33). The first guess, 0.45, cut real results.
 const SEMANTIC_FLOOR = 0.3;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import { auditEntries } from "./lib/audit";
+import { auditEntries, clientOf } from "./lib/audit";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
@@ -114,8 +114,8 @@ async function describe(r: WriteResult, op: Operation, done: string): Promise<st
   }
 }
 
-// the MCP client that made the call (from the OAuth token), for the commit's audit trail
-const clientOf = (extra: unknown) => (extra as { authInfo?: { clientId?: string } } | undefined)?.authInfo?.clientId;
+// the MCP client that made the call, for the commit's audit trail
+const clientOfCall = (extra: unknown) => clientOf(extra, getMcpAuthContext()?.props);
 
 async function write(op: Operation, done: string): Promise<string> {
   return describe(await runOp(op), op, done);
@@ -190,7 +190,7 @@ function createServer() {
       const body = `# ${title}\n\n${content}\n`;
       for (let n = 1; n <= 20; n++) {
         const path = withSuffix(base, n);
-        const r = await runOp({ kind: "create", path, content: body, client: clientOf(extra) });
+        const r = await runOp({ kind: "create", path, content: body, client: clientOfCall(extra) });
         if (r.status === "failed" && r.code === "exists") continue;
         return text(await describe(r, { kind: "create", path, content: body }, `Saved: ${path}`));
       }
@@ -206,7 +206,7 @@ function createServer() {
     },
     async ({ path, content, expected_version }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}), client: clientOf(extra) }, `Saved: ${p}`));
+      return text(await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}), client: clientOfCall(extra) }, `Saved: ${p}`));
     },
   );
 
@@ -215,7 +215,7 @@ function createServer() {
     { annotations: OVERWRITE, description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
     async ({ path, old_text, new_text }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text, client: clientOf(extra) }, `Edited: ${p}`));
+      return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text, client: clientOfCall(extra) }, `Edited: ${p}`));
     },
   );
 
@@ -224,7 +224,7 @@ function createServer() {
     { annotations: DELETE, description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
     async ({ path }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "delete", path: p, client: clientOf(extra) }, `Deleted: ${p}`));
+      return text(await write({ kind: "delete", path: p, client: clientOfCall(extra) }, `Deleted: ${p}`));
     },
   );
 
@@ -233,7 +233,7 @@ function createServer() {
     { annotations: OVERWRITE, description: "Moves or renames a note in one commit (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
     async ({ from, to }, extra) => {
       const a = checkPath(from), b = checkPath(to);
-      return text(await write({ kind: "move", from: a, to: b, client: clientOf(extra) }, `Moved: ${a} -> ${b}`));
+      return text(await write({ kind: "move", from: a, to: b, client: clientOfCall(extra) }, `Moved: ${a} -> ${b}`));
     },
   );
 
@@ -342,6 +342,10 @@ const oauth = new OAuthProvider<Env>({
       const body = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
       const calls = auditEntries(body);
       console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, userId: auth?.userId, ...(calls.length ? { calls } : {}) }));
+      // hand the client id to the tools (the SDK only passes it on when it can verify ctx.auth);
+      // in place, because the SDK checks that ctx.props is still the same object
+      const props = (ctx as any).props;
+      if (auth?.clientId && props && typeof props === "object") props.clientId = auth.clientId;
       return mcp(request, envArg, ctx);
     },
   },
