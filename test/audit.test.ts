@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auditEntries } from "../src/lib/audit";
+import { auditEntries, clientOf } from "../src/lib/audit";
 
 describe("auditEntries", () => {
   it("names the tool and the notes it touches, never the content", () => {
@@ -21,5 +21,15 @@ describe("auditEntries", () => {
       .toEqual([{ rpc: "tools/list" }, { rpc: "tools/call", tool: "read_note", paths: ["a.md"] }]);
     expect(auditEntries(null)).toEqual([]);
     expect(auditEntries("nope")).toEqual([]);
+  });
+});
+
+describe("clientOf", () => {
+  it("prefers the SDK's verified client id", () => {
+    expect(clientOf({ authInfo: { clientId: "sdk" } }, { clientId: "props" })).toBe("sdk");
+  });
+  it("falls back to the client id the Worker put in the request props", () => {
+    expect(clientOf({}, { clientId: "props" })).toBe("props");
+    expect(clientOf(undefined, undefined)).toBeUndefined();
   });
 });
