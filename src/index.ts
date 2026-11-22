@@ -17,6 +17,7 @@ import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 // 0.44, so no floor separates them (ADR 012, #33). The first guess, 0.45, cut real results.
 const SEMANTIC_FLOOR = 0.3;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
+import { auditEntries } from "./lib/audit";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
@@ -333,9 +334,11 @@ const oauth = new OAuthProvider<Env>({
   apiRoute: "/mcp",
   apiHandler: {
     async fetch(request, envArg, ctx) {
-      // audit: which client made the call (never the token itself)
+      // audit: which client called which tool on which notes (never the token or the note content)
       const auth = (ctx as any).auth as { clientId?: string; userId?: string } | undefined;
-      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, userId: auth?.userId }));
+      const body = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
+      const calls = auditEntries(body);
+      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, userId: auth?.userId, ...(calls.length ? { calls } : {}) }));
       return mcp(request, envArg, ctx);
     },
   },
