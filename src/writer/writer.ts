@@ -56,7 +56,9 @@ async function changesFor(op: Operation, read: (path: string) => Promise<string 
 }
 
 function message(op: Operation) {
-  return op.kind === "move" ? `move: ${op.from} -> ${op.to}` : `${op.kind === "create" ? "write" : op.kind}: ${op.path}`;
+  const subject = op.kind === "move" ? `move: ${op.from} -> ${op.to}` : `${op.kind === "create" ? "write" : op.kind}: ${op.path}`;
+  // audit trail: the Git history records who (which MCP client) made each change
+  return op.client ? `${subject}\n\nClient: ${op.client}` : subject;
 }
 
 /**

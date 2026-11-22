@@ -2,12 +2,15 @@
 // to a working copy under a mutex and pushes. The working copy is a port: Artifacts over Git
 // in production, an in-memory fake in tests.
 
-export type Operation =
+export type OperationBody =
   | { kind: "write"; path: string; content: string; expectedVersion?: string } // overwriting needs the version read_note returned
   | { kind: "create"; path: string; content: string } // fails with code "exists" if the note exists
   | { kind: "edit"; path: string; oldText: string; newText: string }
   | { kind: "delete"; path: string }
   | { kind: "move"; from: string; to: string };
+
+/** An operation plus who asked for it: the MCP client id, recorded in the commit (audit trail). */
+export type Operation = OperationBody & { client?: string };
 
 /** A file change in one commit: content, or null to delete. */
 export type Change = { path: string; content: string | null };
