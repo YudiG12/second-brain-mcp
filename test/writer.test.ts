@@ -170,3 +170,15 @@ describe("Writer: failures (confirm before reporting)", () => {
     expect((await writer.run({ kind: "write", path: "y.md", content: "y" })).status).toBe("ok");
   });
 });
+
+describe("Writer: audit trail in the commit message", () => {
+  it("records which client made the change as a Client trailer", async () => {
+    await writer.run({ kind: "edit", path: "a.md", oldText: "alpha", newText: "ALPHA", client: "claude-ai-123" });
+    expect(remote.history().at(-1)!.message).toBe("edit: a.md\n\nClient: claude-ai-123");
+  });
+
+  it("keeps the plain message when the client is unknown", async () => {
+    await writer.run({ kind: "delete", path: "b.md" });
+    expect(remote.history().at(-1)!.message).toBe("delete: b.md");
+  });
+});
