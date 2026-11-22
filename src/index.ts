@@ -17,6 +17,7 @@ import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 // 0.44, so no floor separates them (ADR 012, #33). The first guess, 0.45, cut real results.
 const SEMANTIC_FLOOR = 0.3;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
+import { auditEntries } from "./lib/audit";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
@@ -113,6 +114,9 @@ async function describe(r: WriteResult, op: Operation, done: string): Promise<st
   }
 }
 
+// the MCP client that made the call (from the OAuth token), for the commit's audit trail
+const clientOf = (extra: unknown) => (extra as { authInfo?: { clientId?: string } } | undefined)?.authInfo?.clientId;
+
 async function write(op: Operation, done: string): Promise<string> {
   return describe(await runOp(op), op, done);
 }
@@ -180,13 +184,13 @@ function createServer() {
   server.registerTool(
     "save_idea",
     { annotations: CREATE, description: "Saves a new idea to ideias/YYYY-MM-DD-slug.md (one commit) and indexes it.", inputSchema: { title: z.string(), content: z.string() } },
-    async ({ title, content }) => {
+    async ({ title, content }, extra) => {
       // never overwrite another idea with the same title on the same day (#31): try -2, -3...
       const base = await ideaPath(title);
       const body = `# ${title}\n\n${content}\n`;
       for (let n = 1; n <= 20; n++) {
         const path = withSuffix(base, n);
-        const r = await runOp({ kind: "create", path, content: body });
+        const r = await runOp({ kind: "create", path, content: body, client: clientOf(extra) });
         if (r.status === "failed" && r.code === "exists") continue;
         return text(await describe(r, { kind: "create", path, content: body }, `Saved: ${path}`));
       }
@@ -200,36 +204,36 @@ function createServer() {
       annotations: OVERWRITE, description: "Creates a note, or overwrites a whole one (e.g. projetos/cafezinho.md). To overwrite, pass expected_version: the version read_note returned. If the note changed since, nothing is saved and you get a conflict: read it again and redo the change. To change only part of a note, prefer edit_note.",
       inputSchema: { path: z.string(), content: z.string(), expected_version: z.string().optional() },
     },
-    async ({ path, content, expected_version }) => {
+    async ({ path, content, expected_version }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}) }, `Saved: ${p}`));
+      return text(await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}), client: clientOf(extra) }, `Saved: ${p}`));
     },
   );
 
   server.registerTool(
     "edit_note",
     { annotations: OVERWRITE, description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
-    async ({ path, old_text, new_text }) => {
+    async ({ path, old_text, new_text }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text }, `Edited: ${p}`));
+      return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text, client: clientOf(extra) }, `Edited: ${p}`));
     },
   );
 
   server.registerTool(
     "delete_note",
     { annotations: DELETE, description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
-    async ({ path }) => {
+    async ({ path }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "delete", path: p }, `Deleted: ${p}`));
+      return text(await write({ kind: "delete", path: p, client: clientOf(extra) }, `Deleted: ${p}`));
     },
   );
 
   server.registerTool(
     "move_note",
     { annotations: OVERWRITE, description: "Moves or renames a note in one commit (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
-    async ({ from, to }) => {
+    async ({ from, to }, extra) => {
       const a = checkPath(from), b = checkPath(to);
-      return text(await write({ kind: "move", from: a, to: b }, `Moved: ${a} -> ${b}`));
+      return text(await write({ kind: "move", from: a, to: b, client: clientOf(extra) }, `Moved: ${a} -> ${b}`));
     },
   );
 
@@ -333,9 +337,11 @@ const oauth = new OAuthProvider<Env>({
   apiRoute: "/mcp",
   apiHandler: {
     async fetch(request, envArg, ctx) {
-      // audit: which client made the call (never the token itself)
+      // audit: which client called which tool on which notes (never the token or the note content)
       const auth = (ctx as any).auth as { clientId?: string; userId?: string } | undefined;
-      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, userId: auth?.userId }));
+      const body = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
+      const calls = auditEntries(body);
+      console.log(JSON.stringify({ mcp: request.method, clientId: auth?.clientId, userId: auth?.userId, ...(calls.length ? { calls } : {}) }));
       return mcp(request, envArg, ctx);
     },
   },

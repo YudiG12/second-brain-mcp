@@ -7,6 +7,8 @@
 - **Every client reads and writes only through MCP**, Claude Code on the Mac included. Every write now goes through the Durable Object and its version check ([ADR 014](docs/adr/014-mcp-only-clients.md)).
 
 ### Added
+- **Audit log names the tool and the notes**: each MCP request logs the JSON-RPC method and, for a tool call, the tool and the note paths (`path`, `from`, `to`), next to the client. Never the note content, the query or the token.
+- **Audit trail in Git**: each commit made through MCP ends with a `Client: <clientId>` trailer, so the history records who, what, which note, before/after (the diff) and when. The Worker log is short-lived; the Git history is the durable audit trail.
 - **MCP tool annotations** on every tool: reads are `readOnlyHint`, `save_idea` only creates, `write_note`/`edit_note`/`move_note`/`delete_note` are `destructiveHint` (`delete_note` also `idempotentHint`), none is `openWorldHint`. Hints for clients (parallel reads, safe retries, when to ask for approval), not a security control.
 - `npm run mirror`: an optional read-only copy of the notes in a folder, for viewing (Obsidian's graph view). It fetches and resets; it never edits or pushes.
 
