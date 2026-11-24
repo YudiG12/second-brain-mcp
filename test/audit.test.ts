@@ -54,12 +54,7 @@ describe("span", () => {
   it("logs ok:false with the error and rethrows when the handler throws", async () => {
     const c = capture();
     await expect(span("edit_note", async () => { throw new Error("boom"); }, c.log)).rejects.toThrow("boom");
-    expect(c.lines[0]).toMatchObject({ span: "tool", tool: "edit_note", ok: false, error: "Error: boom" });
-  });
-
-  it("counts an MCP error result as not ok", async () => {
-    const c = capture();
-    await span("delete_note", async () => ({ isError: true, content: [] }), c.log);
-    expect(c.lines[0]).toMatchObject({ ok: false });
+    expect(c.lines[0]).toMatchObject({ span: "tool", tool: "edit_note", ok: false, error: "Error" });
+    expect(JSON.stringify(c.lines)).not.toMatch(/boom/);
   });
 });

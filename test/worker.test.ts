@@ -1,6 +1,6 @@
 import { exports } from "cloudflare:workers";
-import { beforeAll, describe, expect, it } from "vitest";
-import { accessToken, callTool } from "./helpers/oauth";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { accessToken, callTool, rawCall } from "./helpers/oauth";
 
 // Unknown routes are 404; /mcp needs an OAuth token.
 describe("routing", () => {
@@ -54,5 +54,32 @@ describe("admin routes", () => {
       headers: auth ? { Authorization: auth } : {},
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// Trace (#81): every tool registered in createServer emits one span, with the real outcome and no note data.
+describe("tool spans", () => {
+  let token = "";
+  beforeAll(async () => {
+    token = await accessToken();
+  });
+  afterEach(() => vi.restoreAllMocks());
+  const spans = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('{"span"')).map((l) => JSON.parse(l));
+
+  it("logs a failed read_note without the path or the error message", async () => {
+    const log = vi.spyOn(console, "log");
+    await callTool(token, "read_note", { path: "../secret-name.md" });
+    const [s] = spans(log);
+    expect(s).toMatchObject({ span: "tool", tool: "read_note", ok: false });
+    expect(typeof s.ms).toBe("number");
+    expect(JSON.stringify(spans(log))).not.toMatch(/secret-name|Invalid path/);
+  });
+
+  it("marks a write the server couldn't confirm as a tool error, and its span as not ok", async () => {
+    const log = vi.spyOn(console, "log");
+    const res = await rawCall(token, "write_note", { path: "ideias/span-test.md", content: "x" });
+    expect(res.result.isError).toBe(true);
+    expect(spans(log)).toEqual([expect.objectContaining({ span: "tool", tool: "write_note", ok: false })]);
   });
 });
