@@ -26,17 +26,24 @@ def search(query):
     data = next((l[5:] for l in out.splitlines() if l.startswith("data:")), None)
     if data is None:
         raise RuntimeError(f"unexpected response: {out[:200]}")
-    res = json.loads(data)["result"]
+    msg = json.loads(data)
+    if "error" in msg:
+        raise RuntimeError(f"search_notes failed: {msg['error']}")
+    res = msg["result"]
     if res.get("isError"):
         raise RuntimeError(res["content"][0]["text"][:200])
+    # Each hit starts a block with "<path> (keyword|semantic|both)"; the lines after it are note text,
+    # which may cite other .md paths, so only that first line counts.
     paths = []
-    for p in re.findall(r"[\w./-]+\.md", res["content"][0]["text"]):
+    for p in re.findall(r"^(.+?) \((?:keyword|semantic|both)\)$", res["content"][0]["text"], re.M):
         if p not in paths:
             paths.append(p)
     return paths
 
 
 cases = [json.loads(l) for l in open(GOLDEN) if l.strip()]
+if not cases:
+    sys.exit(f"No cases in {GOLDEN}.")
 hits, rr, misses = 0, 0.0, []
 for c in cases:
     ranked = search(c["query"])
