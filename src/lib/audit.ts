@@ -29,3 +29,27 @@ export function clientOf(extra: unknown, props: Record<string, unknown> | undefi
   const fromProps = props?.clientId;
   return typeof fromProps === "string" && fromProps ? fromProps : undefined;
 }
+
+/**
+ * Trace span for one tool call: logs `{span: "tool", tool, ms, ok, error?}` as one JSON line in Workers Logs.
+ * Never the arguments, the result or an error message (they can hold note paths or text): a thrown
+ * error is logged by its code or class name and rethrown, and an MCP result with `isError` counts as not ok.
+ */
+export async function span<T>(tool: string, run: () => Promise<T>, log: (line: string) => void = console.log): Promise<T> {
+  const start = Date.now();
+  try {
+    const out = await run();
+    const ok = !(out && typeof out === "object" && (out as { isError?: unknown }).isError === true);
+    log(JSON.stringify({ span: "tool", tool, ms: Date.now() - start, ok }));
+    return out;
+  } catch (e) {
+    log(JSON.stringify({ span: "tool", tool, ms: Date.now() - start, ok: false, error: errorClass(e) }));
+    throw e;
+  }
+}
+
+const errorClass = (e: unknown) => {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && code) return code;
+  return e instanceof Error ? e.name : typeof e;
+};

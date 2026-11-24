@@ -35,6 +35,11 @@ export async function accessToken(): Promise<string> {
 
 /** Calls one MCP tool on /mcp with a Bearer token and returns its text. */
 export async function callTool(token: string, name: string, args: Record<string, unknown>) {
+  return (await rawCall(token, name, args)).result.content[0].text as string;
+}
+
+/** The whole JSON-RPC response of a tool call, to check isError. */
+export async function rawCall(token: string, name: string, args: Record<string, unknown>) {
   const res = await fetchWorker("/mcp", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
@@ -42,5 +47,5 @@ export async function callTool(token: string, name: string, args: Record<string,
   });
   const body = await res.text();
   const data = body.split("\n").find((l) => l.startsWith("data:"))?.slice(5) ?? body;
-  return JSON.parse(data).result.content[0].text as string;
+  return JSON.parse(data) as { result: { isError?: boolean; content: { text: string }[] } };
 }

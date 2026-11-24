@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auditEntries, clientOf } from "../src/lib/audit";
+import { auditEntries, clientOf, span } from "../src/lib/audit";
 
 describe("auditEntries", () => {
   it("names the tool and the notes it touches, never the content", () => {
@@ -31,5 +31,30 @@ describe("clientOf", () => {
   it("falls back to the client id the Worker put in the request props", () => {
     expect(clientOf({}, { clientId: "props" })).toBe("props");
     expect(clientOf(undefined, undefined)).toBeUndefined();
+  });
+});
+
+describe("span", () => {
+  const capture = () => {
+    const lines: unknown[] = [];
+    return { lines, log: (s: string) => lines.push(JSON.parse(s)) };
+  };
+
+  it("logs the tool, a numeric duration and ok:true when the handler succeeds", async () => {
+    const c = capture();
+    const out = await span("read_note", async () => "result", c.log);
+    expect(out).toBe("result");
+    expect(c.lines).toHaveLength(1);
+    const l = c.lines[0] as Record<string, unknown>;
+    expect(l).toMatchObject({ span: "tool", tool: "read_note", ok: true });
+    expect(typeof l.ms).toBe("number");
+    expect(l).not.toHaveProperty("error");
+  });
+
+  it("logs ok:false with the error and rethrows when the handler throws", async () => {
+    const c = capture();
+    await expect(span("edit_note", async () => { throw new Error("boom"); }, c.log)).rejects.toThrow("boom");
+    expect(c.lines[0]).toMatchObject({ span: "tool", tool: "edit_note", ok: false, error: "Error" });
+    expect(JSON.stringify(c.lines)).not.toMatch(/boom/);
   });
 });
