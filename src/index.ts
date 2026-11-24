@@ -47,6 +47,8 @@ const E = env as unknown as Env;
 const PUBLIC_URL = (env as unknown as { PUBLIC_URL: string }).PUBLIC_URL;
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+// a tool error the client sees as one (MCP isError), so the agent and the trace span know nothing was done
+const fail = (t: string) => ({ ...text(t), isError: true as const });
 
 
 // ---------- Index (ADR 009, ADR 010) ----------
@@ -93,31 +95,31 @@ async function runOp(op: Operation): Promise<WriteResult> {
   }
 }
 
-/** Describes a write result for the client, and enqueues the changed notes for indexing. */
-async function describe(r: WriteResult, op: Operation, done: string): Promise<string> {
+/** Describes a write result for the client as an MCP result (isError when nothing was confirmed), and enqueues the changed notes for indexing. */
+async function describe(r: WriteResult, op: Operation, done: string) {
   switch (r.status) {
     case "failed":
-      return r.reason;
+      return fail(r.reason);
     case "busy":
-      return "The notes are changing too fast right now; nothing was saved. Try again.";
+      return fail("The notes are changing too fast right now; nothing was saved. Try again.");
     case "unknown":
       // enqueue anyway: indexing reads the head, so this is harmless if nothing landed
       await enqueue(opPaths(op).map((path) => ({ type: "index", path, reason: "write" }))).catch(() => {});
-      return `Not sure the change to ${opPaths(op).join(" and ")} was saved (${r.reason}). Check it with read_note before retrying.`;
+      return fail(`Not sure the change to ${opPaths(op).join(" and ")} was saved (${r.reason}). Check it with read_note before retrying.`);
   }
   const saved = `${done} (${r.commit.slice(0, 7)}). Search reflects it in a few seconds to a couple of minutes.`;
   try {
     await enqueue(r.paths.map((path) => ({ type: "index", path, reason: "write" })));
-    return saved;
+    return text(saved);
   } catch (e) {
-    return `${saved}. Search will catch up later (enqueue failed: ${String(e)}).`;
+    return text(`${saved}. Search will catch up later (enqueue failed: ${String(e)}).`);
   }
 }
 
 // the MCP client that made the call, for the commit's audit trail
 const clientOfCall = (extra: unknown) => clientOf(extra, getMcpAuthContext()?.props);
 
-async function write(op: Operation, done: string): Promise<string> {
+async function write(op: Operation, done: string) {
   return describe(await runOp(op), op, done);
 }
 
@@ -150,7 +152,7 @@ function createServer() {
     async ({ path }) => {
       const p = checkPath(path); // same rules as writes (#30)
       const body = await readNote(E.ARTIFACTS, p);
-      if (body === null) return text(`Note not found: ${p}`);
+      if (body === null) return fail(`Note not found: ${p}`);
       // the version goes in its own block, so an agent rewriting the note doesn't copy it into the content
       return { content: [{ type: "text" as const, text: body }, { type: "text" as const, text: `version: ${await noteVersion(body)}` }] };
     },
@@ -176,7 +178,7 @@ function createServer() {
           return semanticHits(res.matches, SEMANTIC_FLOOR);
         })().catch((e) => (console.error(JSON.stringify({ semanticSearchFailed: String(e) })), null)),
       ]);
-      if (keyword === null && semantic === null) return text("Search is unavailable right now. Try again in a moment.");
+      if (keyword === null && semantic === null) return fail("Search is unavailable right now. Try again in a moment.");
       const results = fuse(keyword ?? [], semantic ?? [], limit ?? 10);
       const lines = results.map((r) => `${r.path} (${r.matched})\n${r.text.slice(0, 400)}`);
       const note =
@@ -196,9 +198,9 @@ function createServer() {
         const path = withSuffix(base, n);
         const r = await runOp({ kind: "create", path, content: body, client: clientOfCall(extra) });
         if (r.status === "failed" && r.code === "exists") continue;
-        return text(await describe(r, { kind: "create", path, content: body }, `Saved: ${path}`));
+        return await describe(r, { kind: "create", path, content: body }, `Saved: ${path}`);
       }
-      return text(`Too many ideas named "${title}" today; nothing was saved. Use a different title.`);
+      return fail(`Too many ideas named "${title}" today; nothing was saved. Use a different title.`);
     },
   );
 
@@ -210,7 +212,7 @@ function createServer() {
     },
     async ({ path, content, expected_version }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}), client: clientOfCall(extra) }, `Saved: ${p}`));
+      return await write({ kind: "write", path: p, content, ...(expected_version ? { expectedVersion: expected_version } : {}), client: clientOfCall(extra) }, `Saved: ${p}`);
     },
   );
 
@@ -219,7 +221,7 @@ function createServer() {
     { annotations: OVERWRITE, description: "Replaces an exact passage of a note with another (old_text must appear exactly once). An empty new_text deletes the passage. Use read_note first to copy the exact passage.", inputSchema: { path: z.string(), old_text: z.string(), new_text: z.string() } },
     async ({ path, old_text, new_text }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "edit", path: p, oldText: old_text, newText: new_text, client: clientOfCall(extra) }, `Edited: ${p}`));
+      return await write({ kind: "edit", path: p, oldText: old_text, newText: new_text, client: clientOfCall(extra) }, `Edited: ${p}`);
     },
   );
 
@@ -228,7 +230,7 @@ function createServer() {
     { annotations: DELETE, description: "Deletes a note (it stays recoverable in the Git history).", inputSchema: { path: z.string() } },
     async ({ path }, extra) => {
       const p = checkPath(path);
-      return text(await write({ kind: "delete", path: p, client: clientOfCall(extra) }, `Deleted: ${p}`));
+      return await write({ kind: "delete", path: p, client: clientOfCall(extra) }, `Deleted: ${p}`);
     },
   );
 
@@ -237,7 +239,7 @@ function createServer() {
     { annotations: OVERWRITE, description: "Moves or renames a note in one commit (e.g. ideias/x.md to projetos/x.md).", inputSchema: { from: z.string(), to: z.string() } },
     async ({ from, to }, extra) => {
       const a = checkPath(from), b = checkPath(to);
-      return text(await write({ kind: "move", from: a, to: b, client: clientOfCall(extra) }, `Moved: ${a} -> ${b}`));
+      return await write({ kind: "move", from: a, to: b, client: clientOfCall(extra) }, `Moved: ${a} -> ${b}`);
     },
   );
 
