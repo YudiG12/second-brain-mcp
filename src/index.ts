@@ -17,7 +17,7 @@ import { buildFtsQuery, fuse, semanticHits, type Hit } from "./search/hybrid";
 // 0.44, so no floor separates them (ADR 012, #33). The first guess, 0.45, cut real results.
 const SEMANTIC_FLOOR = 0.3;
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import { auditEntries, clientOf } from "./lib/audit";
+import { auditEntries, clientOf, span } from "./lib/audit";
 import { authorize, callback } from "./auth/github";
 import { listNotes, readNote } from "./notes-store";
 import type { Operation, WriteResult } from "./writer/types";
@@ -133,6 +133,10 @@ const DELETE = { readOnlyHint: false, destructiveHint: true, idempotentHint: tru
 
 function createServer() {
   const server = new McpServer({ name: "second-brain", version: "0.3.0" });
+  // trace: every tool handler runs inside a span (tool, ms, ok), registered in one place
+  const register = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: unknown, handler: (...args: unknown[]) => Promise<unknown>) =>
+    register(name, config as never, ((...args: unknown[]) => span(name, () => handler(...args))) as never)) as typeof server.registerTool;
 
   server.registerTool(
     "list_notes",
